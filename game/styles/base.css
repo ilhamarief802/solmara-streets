@@ -1,0 +1,107 @@
+/* Solmara Streets: page chrome only. Everything the world is made of is drawn in
+   code onto a canvas, so this file carries no art and refers to no asset. */
+
+:root {
+  --ink: #0b0d12;
+  --paper: #e8eef7;
+  --hot: #ff6b57;
+  --cold: #6fd0ff;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--paper);
+  font: 12px/1.45 "DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace;
+}
+
+#viewport {
+  position: fixed;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  outline: none;
+}
+
+/* The boot line is a plain readout of where start-up got to, and it doubles as the
+   visible tombstone if the vendored three.js or a module fails to load. */
+#boot {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  border-radius: 3px;
+  background: rgba(8, 11, 18, 0.72);
+  border: 1px solid rgba(111, 208, 255, 0.28);
+  color: var(--cold);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  transition: opacity 400ms linear;
+}
+
+#boot.done {
+  opacity: 0;
+}
+
+#error-overlay {
+  position: fixed;
+  inset: 0 auto auto 0;
+  max-height: 62vh;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  padding: 10px 14px;
+  z-index: 40;
+  background: rgba(38, 6, 10, 0.94);
+  border-bottom: 2px solid var(--hot);
+  color: #ffd9d2;
+}
+
+#error-overlay[hidden] {
+  display: none;
+}
+
+#error-overlay pre {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#debug-overlay {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 30;
+  min-width: 214px;
+  padding: 7px 9px;
+  border-radius: 3px;
+  background: rgba(8, 11, 18, 0.66);
+  border: 1px solid rgba(232, 238, 247, 0.16);
+  white-space: pre;
+  pointer-events: none;
+}
+
+#debug-overlay[hidden] {
+  display: none;
+}
+
+#debug-overlay b {
+  color: var(--cold);
+  font-weight: normal;
+}
+
+/* Read aloud, never shown: the status line screen readers announce. */
+#status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
