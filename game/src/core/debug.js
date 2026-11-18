@@ -162,3 +162,80 @@ export class DebugOverlay {
 export function createDebug(options) {
   return new DebugOverlay(options);
 }
+
+/**
+ * An ASCII readback of the framebuffer. Renders one frame, reads the pixels and
+ * returns a coarse text map plus colour statistics. This is how a shot can be
+ * checked from a terminal or a script with no eyes on it: bright and dark coverage,
+ * how much of the frame is sky, and where the sun or the moon landed.
+ */
+export function createFramebufferProbe(renderer, scene, camera) {
+  return function preview(options = {}) {
+    const width = options.columns ?? 112;
+    const height = options.rows ?? 30;
+    const cam = options.camera ?? camera;
+    const gl = renderer.getContext();
+    const bufferWidth = renderer.domElement.width;
+    const bufferHeight = renderer.domElement.height;
+    renderer.render(scene, cam);
+    const pixels = new Uint8Array(bufferWidth * bufferHeight * 4);
+    gl.readPixels(0, 0, bufferWidth, bufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+
+    const ramp = ' .:-=+*#%@';
+    const lines = [];
+    const counts = {};
+    for (let row = 0; row < height; row += 1) {
+      let line = '';
+      for (let column = 0; column < width; column += 1) {
+        const x0 = Math.floor((column * bufferWidth) / width);
+        const x1 = Math.floor(((column + 1) * bufferWidth) / width);
+        const y0 = Math.floor(((height - 1 - row) * bufferHeight) / height);
+        const y1 = Math.floor(((height - row) * bufferHeight) / height);
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        let count = 0;
+        for (let y = y0; y < y1; y += 3) {
+          for (let x = x0; x < x1; x += 3) {
+            const index = (y * bufferWidth + x) * 4;
+            r += pixels[index];
+            g += pixels[index + 1];
+            b += pixels[index + 2];
+            count += 1;
+          }
+        }
+        r /= count;
+        g /= count;
+        b /= count;
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        const level = Math.min(ramp.length - 1, Math.floor(luminance * ramp.length));
+        const key = b > r * 1.12 && b > g * 1.06 ? 'sky'
+          : g > r * 1.05 && g > b * 1.03 ? 'green'
+            : r > b * 1.18 && luminance > 0.45 ? 'warm'
+              : luminance < 0.2 ? 'dark'
+                : 'neutral';
+        counts[key] = (counts[key] ?? 0) + 1;
+        line += ramp[level];
+      }
+      lines.push(line);
+    }
+
+    const total = width * height;
+    const stats = {};
+    for (const [key, value] of Object.entries(counts)) stats[key] = `${((100 * value) / total).toFixed(0)}%`;
+    stats.avg = (() => {
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let count = 0;
+      for (let i = 0; i < pixels.length; i += 4 * 97) {
+        r += pixels[i];
+        g += pixels[i + 1];
+        b += pixels[i + 2];
+        count += 1;
+      }
+      return `${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)}`;
+    })();
+    return { map: lines.join('\n'), stats };
+  };
+}

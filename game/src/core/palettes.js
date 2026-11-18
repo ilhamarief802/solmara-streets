@@ -307,7 +307,6 @@ export function sampleSky(hour, out = {}, weather = null) {
 
   const daylight = Math.max(0, 1 - Math.abs(1 - (out.sunIntensity / 1.6)));
   out.daylight = Math.min(1, daylight);
-  out.night = Math.max(0, 1 - out.starOpacity * 1.1);
   out.hour = h;
   out.phase = phaseAt(h);
 

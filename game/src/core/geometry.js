@@ -38,6 +38,15 @@ export class GeometryBuilder {
 
   /** One triangle: three packed vertices, one normal, three uv/colour pairs. */
   triangle(a, b, c, normal, uvA, uvB, uvC, color) {
+    if (!a || !b || !c || !uvA || !uvB || !uvC || !color) {
+      // A malformed face is a bug in the caller, not a reason to lose the city: say so
+      // once per bucket and skip it.
+      if (!this.reported) {
+        this.reported = true;
+        console.error(`geometry["${this.name}"]: skipped a face with missing corners, normals, uvs or colour`, { a, b, c, normal, uvA, uvB, uvC, color });
+      }
+      return;
+    }
     this.positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
     for (let i = 0; i < 3; i += 1) this.normals.push(normal[0], normal[1], normal[2]);
     this.uvs.push(uvA[0], uvA[1], uvB[0], uvB[1], uvC[0], uvC[1]);
@@ -46,6 +55,12 @@ export class GeometryBuilder {
     this.track(a[0], a[1], a[2]);
     this.track(b[0], b[1], b[2]);
     this.track(c[0], c[1], c[2]);
+  }
+
+  /** A triangle whose three uvs arrive as one [uvA, uvB, uvC] array. */
+  tri(a, b, c, normal, uvs, color) {
+    this.triangle(a, b, c, normal, uvs[0], uvs[1], uvs[2], color);
+    return this;
   }
 
   /** A quad from four corners in winding order (counter clockwise seen from front). */
@@ -152,17 +167,19 @@ export class GeometryBuilder {
     const vOffset = quad.vOffset ?? 0;
 
     const corner = (lx, lz) => [cx + lx * cos - lz * sin, y, cz + lx * sin + lz * cos];
-    const a = corner(-hw, -hd);
-    const b = corner(hw, -hd);
-    const c = corner(hw, hd);
+    // Wound so the face points up: (-x,+z) -> (+x,+z) -> (+x,-z) -> (-x,-z).
     const d = corner(-hw, hd);
-    const uv = [
+    const c = corner(hw, hd);
+    const b = corner(hw, -hd);
+    const a = corner(-hw, -hd);
+    const uSpan = width * uScale;
+    const vSpan = depth * vScale;
+    this.quad(d, c, b, a, [0, 1, 0], [
+      [uOffset, vOffset + vSpan],
+      [uOffset + uSpan, vOffset + vSpan],
+      [uOffset + uSpan, vOffset],
       [uOffset, vOffset],
-      [uOffset + width * uScale, vOffset],
-      [uOffset + width * uScale, vOffset + depth * vScale],
-      [uOffset, vOffset + depth * vScale],
-    ];
-    this.quad(a, b, c, d, [0, 1, 0], uv, color);
+    ], color);
     return this;
   }
 
@@ -218,11 +235,12 @@ export class GeometryBuilder {
       const u0 = (i / segments) * Math.PI * 2 * radiusBottom * uScale;
       const u1 = ((i + 1) / segments) * Math.PI * 2 * radiusBottom * uScale;
       const vTop = height * vScale;
-      this.quad(b0, b1, t1v, t0v, normal, [[u0, 0], [u1, 0], [u1, vTop], [u0, vTop]], color);
+      // Wound bottom(i) -> top(i) -> top(i+1) -> bottom(i+1) so the wall faces out.
+      this.quad(b0, t0v, t1v, b1, normal, [[u0, 0], [u0, vTop], [u1, vTop], [u1, 0]], color);
       if (cylinder.cap !== false && radiusTop > 0.001) {
         const apex = put(0, topY, 0);
         const normalTop = matrix ? rotateVector([0, 1, 0], matrix) : [0, 1, 0];
-        this.triangle(t0v, t1v, apex, normalTop, [[u0, vTop], [u1, vTop], [(u0 + u1) / 2, vTop + radiusTop * vScale]], color);
+        this.tri(t1v, t0v, apex, normalTop, [[u1, vTop], [u0, vTop], [(u0 + u1) / 2, vTop + radiusTop * vScale]], color);
       }
     }
     return this;
@@ -265,8 +283,8 @@ export class GeometryBuilder {
       const vSpan = slope * vScale;
       this.quad(frontA, frontB, ridgeB, ridgeA, normalFront, [[0, 0], [uSpan, 0], [uSpan, vSpan], [0, vSpan]], color);
       this.quad(backB, backA, ridgeA, ridgeB, normalBack, [[0, 0], [uSpan, 0], [uSpan, vSpan], [0, vSpan]], color);
-      this.triangle(frontA, ridgeA, backA, rotateY([-1, 0, 0], rotY), [[0, 0], [hw * uScale, vSpan], [0, vSpan * 0.6]], color);
-      this.triangle(backB, ridgeB, frontB, rotateY([1, 0, 0], rotY), [[0, 0], [hw * uScale, vSpan], [0, vSpan * 0.6]], color);
+      this.tri(frontA, ridgeA, backA, rotateY([-1, 0, 0], rotY), [[0, 0], [hw * uScale, vSpan], [0, vSpan * 0.6]], color);
+      this.tri(backB, ridgeB, frontB, rotateY([1, 0, 0], rotY), [[0, 0], [hw * uScale, vSpan], [0, vSpan * 0.6]], color);
     } else {
       const ridgeA = at(0, height, -hd);
       const ridgeB = at(0, height, hd);
@@ -279,10 +297,10 @@ export class GeometryBuilder {
       const normalRight = rotateY([hw / slope, height / slope, 0], rotY);
       const uSpan = depth * uScale;
       const vSpan = slope * vScale;
-      this.quad(leftB, leftA, ridgeA, ridgeB, normalLeft, [[0, 0], [uSpan, 0], [uSpan, vSpan], [0, vSpan]], color);
-      this.quad(rightA, rightB, ridgeB, ridgeA, normalRight, [[0, 0], [uSpan, 0], [uSpan, vSpan], [0, vSpan]], color);
-      this.triangle(leftA, ridgeA, rightA, rotateY([0, 0, -1], rotY), [[0, 0], [hd * uScale, vSpan], [0, vSpan * 0.6]], color);
-      this.triangle(rightB, ridgeB, leftB, rotateY([0, 0, 1], rotY), [[0, 0], [hd * uScale, vSpan], [0, vSpan * 0.6]], color);
+      this.quad(leftA, leftB, ridgeB, ridgeA, normalLeft, [[0, 0], [uSpan, 0], [uSpan, vSpan], [0, vSpan]], color);
+      this.quad(rightB, rightA, ridgeA, ridgeB, normalRight, [[0, 0], [uSpan, 0], [uSpan, vSpan], [0, vSpan]], color);
+      this.tri(leftA, ridgeA, rightA, rotateY([0, 0, -1], rotY), [[0, 0], [hd * uScale, vSpan], [0, vSpan * 0.6]], color);
+      this.tri(rightB, ridgeB, leftB, rotateY([0, 0, 1], rotY), [[0, 0], [hd * uScale, vSpan], [0, vSpan * 0.6]], color);
     }
     return this;
   }
@@ -308,7 +326,8 @@ export class GeometryBuilder {
       const u0 = t0 * inner * uScale;
       const u1 = t1 * inner * uScale;
       const vSpan = (outer - inner) * vScale;
-      this.quad(a, b, c, d, [0, 1, 0], [[u0, 0], [u0, vSpan], [u1, vSpan], [u1, 0]], color);
+      // Wound inner(start) -> inner(end) -> outer(end) -> outer(start) to face up.
+      this.quad(a, d, c, b, [0, 1, 0], [[u0, 0], [u1, 0], [u1, vSpan], [u0, vSpan]], color);
     }
     return this;
   }

@@ -6,6 +6,13 @@
 
 import { SkyDome } from './skydome.js';
 
+/**
+ * three.js r155 and later use physically correct light units: the Lambert diffuse
+ * response divides irradiance by PI. Without this the whole city renders about three
+ * times too dark, so every light intensity below is multiplied by PI.
+ */
+export const LIGHT_SCALE = Math.PI;
+
 export function createScene(settings, options = {}) {
   const scene = new THREE.Scene();
   scene.name = 'SolmaraStreets';
@@ -81,14 +88,14 @@ export function updateAtmosphere(root, state) {
   const { sun, moon, hemi, fog, sky } = root;
 
   sun.color.setHex(palette.sun);
-  sun.intensity = palette.sunIntensity;
+  sun.intensity = palette.sunIntensity * LIGHT_SCALE;
   sun.position.copy(sunDirection).multiplyScalar(900);
   sun.target.position.set(0, 0, 0);
   sun.target.updateMatrixWorld();
   sun.visible = palette.sunIntensity > 0.001;
 
   moon.color.setHex(palette.moon);
-  moon.intensity = palette.moonIntensity;
+  moon.intensity = palette.moonIntensity * LIGHT_SCALE;
   moon.position.copy(moonDirection).multiplyScalar(900);
   moon.target.position.set(0, 0, 0);
   moon.target.updateMatrixWorld();
@@ -96,7 +103,7 @@ export function updateAtmosphere(root, state) {
 
   hemi.color.setHex(palette.ambientSky);
   hemi.groundColor.setHex(palette.ambientGround);
-  hemi.intensity = palette.ambientIntensity;
+  hemi.intensity = palette.ambientIntensity * LIGHT_SCALE;
 
   fog.color.setHex(palette.fog);
   fog.near = settings.fogNear;

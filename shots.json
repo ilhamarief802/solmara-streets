@@ -1,5 +1,12 @@
 [
-  { "name": "1-start.jpg", "query": "?shot=start&seed=1" },
-  { "name": "2-play.jpg", "query": "?shot=play&seed=1" },
-  { "name": "3-end.jpg", "query": "?shot=end&seed=1" }
+  {
+    "name": "cover.jpg",
+    "query": "?shot=cover&seed=1",
+    "description": "Downtown boulevard at golden hour: the sun low over the harbour, the marina in the middle distance, glass towers behind."
+  },
+  {
+    "name": "night.jpg",
+    "query": "?shot=night&seed=1",
+    "description": "The Neon Strip after dark: lit windows and neon signs, street light pools, the moon low over the harbour cranes."
+  }
 ]
