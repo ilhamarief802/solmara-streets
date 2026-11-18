@@ -112,6 +112,23 @@ let firstFrame = true;
 let hudClock = 0;
 let lastPrompt = '';
 
+/** The HUD is read from the same state everything else writes, at most six times a second. */
+function refreshHud() {
+  const prompt = vehicles.prompt();
+  if (prompt !== lastPrompt) {
+    lastPrompt = prompt;
+    world.state.prompt = prompt;
+  }
+  hud.update({
+    districtName: world.districts[world.state.district]?.name ?? 'Solmara',
+    hour: clock.hour,
+    mode: vehicles.activeCar ? 'driving' : 'foot',
+    vehicle: vehicles.activeCar?.name,
+    speed: Math.abs(vehicles.activeCar?.speed ?? 0) * 3.6,
+    prompt,
+  });
+}
+
 function onUpdate(dt) {
   if (loop.paused) return;
   clock.update(dt);
@@ -149,6 +166,7 @@ function onRender(frameSeconds) {
     if (input.keyPressed('KeyF') || input.keyPressed('KeyE')) {
       const stolen = vehicles.tryEnter(player);
       if (player.car) cameraRig.timeSinceLook = 0;
+      refreshHud();
       bus.emit('game:interact', { driving: Boolean(player.car), stolen });
     }
     if (input.keyPressed('KeyV')) {
@@ -172,19 +190,7 @@ function onRender(frameSeconds) {
   hudClock += frameSeconds;
   if (hudClock >= 1 / 6) {
     hudClock = 0;
-    const prompt = vehicles.prompt();
-    if (prompt !== lastPrompt) {
-      lastPrompt = prompt;
-      world.state.prompt = prompt;
-    }
-    hud.update({
-      districtName: world.districts[world.state.district]?.name ?? 'Solmara',
-      hour: clock.hour,
-      mode: vehicles.activeCar ? 'driving' : 'foot',
-      vehicle: vehicles.activeCar?.name,
-      speed: Math.abs(vehicles.activeCar?.speed ?? 0) * 3.6,
-      prompt,
-    });
+    refreshHud();
   }
 
   perf.update(frameSeconds, {

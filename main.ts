@@ -6,12 +6,13 @@
 // using the vendored make.fun library.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Screenshots come from the deterministic shot rig: `?shot=cover&seed=1` and
-// `?shot=night&seed=1`, both of which raise window.__SHOT_READY once warm.
+// Screenshots come from the deterministic shot rig: `?shot=cover&seed=1`,
+// `?shot=night&seed=1`, `?shot=drive&seed=1` and `?shot=street&seed=1`, all of which
+// raise window.__SHOT_READY once warm.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier, readGameTree } from './vendor/makefun-game.ts';
@@ -152,7 +153,11 @@ process.stdout.write(
 for (const row of shotRows) process.stdout.write(`  ${row.name.padEnd(28)} ${kib(row.bytes).padStart(8)}\n`);
 
 // ------------------------------------------------------------------ hand it in
+// The destination is cleared first: a stale screenshot from an earlier run would push
+// the set over the four-shot cap and refuse an otherwise good entry.
 mkdirSync(out, { recursive: true });
+rmSync(join(out, 'game'), { recursive: true, force: true });
+rmSync(join(out, 'screenshots'), { recursive: true, force: true });
 cpSync(gameDir, join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
 if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
@@ -168,6 +173,8 @@ try {
     'solmara: capture the shots first — node serve.ts, then open\n' +
       '  http://localhost:8080/?shot=cover&seed=1\n' +
       '  http://localhost:8080/?shot=night&seed=1\n' +
+      '  http://localhost:8080/?shot=drive&seed=1\n' +
+      '  http://localhost:8080/?shot=street&seed=1\n' +
       'waiting for window.__SHOT_READY and saving each as a screenshot in screenshots/, then re-run.\n',
   );
   process.exit(1);
