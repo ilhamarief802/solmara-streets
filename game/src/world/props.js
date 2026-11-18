@@ -241,8 +241,9 @@ export function buildProps(plan, textures, colliders, options = {}) {
       }
     }
 
-    // Parked cars along one or two kerbs of the block.
-    if (district.props.cars > 0.2) {
+    // Parked cars along one or two kerbs of the block. The vehicle system owns cars now
+    // (they have to be enterable), so the world only draws them when asked to.
+    if (options.parkedCars !== false && district.props.cars > 0.2) {
       for (const side of random.shuffle(sides.slice()).slice(0, 2)) {
         const length = Math.hypot(side.x1 - side.x0, side.z1 - side.z0);
         const count = Math.floor(length / random.range(18, 30));

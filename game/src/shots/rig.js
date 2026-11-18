@@ -8,8 +8,10 @@ import { easeInOutCubic, clamp01 } from '../core/math.js';
 import { hideBootCard } from '../core/debug.js';
 import cover from './cover.js';
 import night from './night.js';
+import drive from './drive.js';
+import street from './street.js';
 
-export const SHOTS = { cover, night };
+export const SHOTS = { cover, night, drive, street };
 export const SHOT_NAMES = Object.keys(SHOTS);
 
 /** Reads ?shot= and ?seed= from a query string. */
@@ -34,6 +36,8 @@ export class ShotRig {
     this.warmupSeconds = 2.2;
     this.warmupFrames = 6;
     this.startedAt = 0;
+    /** Exposure multiplier a scenario may set (dusk streets need a stop more light). */
+    this.exposure = 1;
   }
 
   /** Starts a named shot. Returns false if the name is unknown. */
@@ -47,6 +51,7 @@ export class ShotRig {
     this.ready = false;
     this.startedAt = performance.now();
     this.active = scenario;
+    this.exposure = 1;
     this.random = new Random(`${name}:${seed}:rig`);
     window.__SHOT_READY = false;
     document.title = `Solmara Streets · ${name}`;
@@ -60,6 +65,7 @@ export class ShotRig {
       camera: this.game.camera,
       world: this.game.world,
       renderer: this.game.renderer,
+      rig: this,
     };
     scenario.setup(ctx);
     this.context = ctx;

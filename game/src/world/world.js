@@ -14,6 +14,7 @@ import { buildBuildings } from './buildings.js';
 import { buildLandmarks } from './landmarks.js';
 import { buildProps } from './props.js';
 import { createWater } from './water.js';
+import { createWalkNetwork } from './sidewalks.js';
 
 /**
  * Builds the whole city.
@@ -54,12 +55,20 @@ export function createWorld(options = {}) {
   group.add(highway.group);
 
   onStage('dressing the streets');
-  const props = buildProps(plan, textures, colliders, { detail: lite ? Math.min(settings.propDensity, 0.5) : settings.propDensity });
+  const props = buildProps(plan, textures, colliders, {
+    detail: lite ? Math.min(settings.propDensity, 0.5) : settings.propDensity,
+    parkedCars: false,
+  });
   group.add(props.group);
 
   onStage('filling the harbour');
   const water = createWater(plan);
   group.add(water.mesh);
+
+  // The pedestrian and parking layer sits on top of the colliders, so a kerbside space
+  // is never placed inside a lamp post, a palm or a wall.
+  onStage('marking the pavements');
+  const walk = createWalkNetwork(plan, colliders);
 
   // Every material with a lit-window emissive map, so dusk can turn them up together.
   const windowMaterials = [...buildings.materials];
@@ -128,9 +137,29 @@ export function createWorld(options = {}) {
     blocks: plan.stats.blocks,
     bridges: plan.stats.bridges,
     colliders: colliders.boxes.length,
+    parkingSpots: walk.parking.length,
+    crossings: walk.stats.crossings,
     triangles: terrain.triangles + roads.triangles + buildings.triangles + landmarks.triangles + highway.triangles + props.triangles,
     textures: textures.list().length,
     buildMs: Math.round(performance.now() - started),
+  };
+
+  // The play-state the HUD (and the mission session after it) reads. Systems write it,
+  // nothing here simulates anything: one shared shape, no imports back up the stack.
+  const state = {
+    mode: 'foot',
+    vehicle: null,
+    speed: 0,
+    topSpeed: 0,
+    distanceWalked: 0,
+    distanceDriven: 0,
+    carsStolen: 0,
+    score: 0,
+    nearbyTraffic: 0,
+    nearbyPeds: 0,
+    district: plan.spawns[0]?.district ?? 'downtown',
+    hour: 0,
+    prompt: '',
   };
 
   const world = {
@@ -146,8 +175,10 @@ export function createWorld(options = {}) {
     highway,
     props,
     water,
+    walk,
     minimap,
     stats,
+    state,
     notes: landmarks.notes,
     spawns: plan.spawns,
     districts: DISTRICTS,
@@ -168,6 +199,9 @@ export function createWorld(options = {}) {
     nearestLanePoint: (x, z, maxDistance) => nearestLanePoint(plan, x, z, maxDistance),
     nearestRoadNode: (x, z) => nearestRoadNode(plan, x, z),
     groundHeight: (x, z) => colliders.groundHeight(x, z),
+    surfaceAt: (x, z) => walk.surfaceAt(x, z),
+    isSidewalk: (x, z) => walk.isSidewalk(x, z),
+    parkingSpots: walk.parking,
     resolveCircle: (x, z, radius) => colliders.resolveCircle(x, z, radius),
     spawnById: (id) => plan.spawns.find((spawn) => spawn.id === id) ?? null,
     update,

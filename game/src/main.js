@@ -1,7 +1,8 @@
 // Solmara Streets: the entry module. Reads the URL settings, installs the one error
-// overlay before anything else can fail, builds the renderer, sky and city, starts the
-// fixed-step loop, and exposes window.__GAME for inspection. With ?shot= it hands the
-// camera to the shot rig; without it, an observation camera starts on the Avenida Sol.
+// overlay before anything else can fail, builds the renderer, sky and city, puts the
+// player on the Avenida Sol with a third-person camera, starts the fixed-step loop and
+// exposes window.__GAME for inspection and for the shot rig. Traffic, pedestrians and
+// the kerbside cars are all seeded from the same world seed, so a reload is a replay.
 
 import { settings } from './core/settings.js';
 import { installErrorOverlay, PerfOverlay, bootStatus, hideBootCard } from './core/debug.js';
@@ -14,18 +15,23 @@ import { createAtmosphere } from './core/sky.js';
 import { createWorld } from './world/world.js';
 import { bus } from './core/events.js';
 import { ShotRig, parseShotParams, SHOTS } from './shots/rig.js';
-import { clamp, damp } from './core/math.js';
+import { Player } from './player/player.js';
+import { OrbitCamera } from './camera/orbit.js';
+import { VehicleSystem } from './vehicles/vehicles.js';
+import { TrafficSystem } from './traffic/traffic.js';
+import { PedestrianSystem } from './pedestrians/pedestrians.js';
+import { createHud } from './hud/hud.js';
 
 installErrorOverlay();
 window.__SHOT_READY = false;
-window.__SOLMARA_VERSION = '0.1.0-world';
+window.__SOLMARA_VERSION = '0.2.0-streets';
 
 bootStatus('Waking Solmara…');
 
 const canvas = document.getElementById('viewport');
 const renderer = createRenderer(canvas, settings);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.6, renderer.userData.software ? 3000 : 4600);
+const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.35, renderer.userData.software ? 3000 : 4600);
 camera.rotation.order = 'YXZ';
 renderer.userData.camera = camera;
 
@@ -54,51 +60,48 @@ scene.add(world.group);
 const input = createInput(canvas);
 const loop = new GameLoop({ fixedStep: 1 / 60 });
 const perf = new PerfOverlay(document.getElementById('perf'), renderer);
-const shots = new ShotRig({ renderer, scene, camera, world, clock, weather, settings, input, loop, bus });
 
-// ---------------------------------------------------------------- observation camera
-// Until the player session lands, the world is looked at with a simple fly camera:
-// WASD to move, mouse (pointer lock) or arrows to look, Space/Ctrl to rise and sink.
-const spawn = world.spawnById('downtown-boulevard');
-const fly = {
-  x: spawn ? spawn.x : 300,
-  y: 6.0,
-  z: spawn ? spawn.z : 100,
-  yaw: spawn ? spawn.heading + Math.PI / 2 : -2.2,
-  pitch: -0.1,
-  speed: 18,
-};
-camera.position.set(fly.x, fly.y, fly.z);
-camera.rotation.set(fly.pitch, fly.yaw, 0);
+// ---------------------------------------------------------------- the player
+// Spawn on the pavement of the Avenida Sol, a few steps from the downtown junction:
+// road and traffic to the east, towers to the west, a coupe parked at the kerb.
+const spawn = world.spawnById('downtown-boulevard') ?? { x: 340, z: 80, heading: 0 };
+const player = new Player({
+  world,
+  scene,
+  spawn: { x: spawn.x - 10.8, z: spawn.z - 20, heading: 0 },
+});
 
-function updateFlyCamera(dt) {
-  if (shots.active) return;
-  const look = input.consumeMouseDelta();
-  fly.yaw -= look.x;
-  fly.pitch = clamp(fly.pitch - look.y, -1.32, 1.32);
-  if (input.isDown('cameraLeft')) fly.yaw += dt * 1.7;
-  if (input.isDown('cameraRight')) fly.yaw -= dt * 1.7;
-  if (input.isDown('lookUp')) fly.pitch = clamp(fly.pitch + dt * 1.2, -1.32, 1.32);
-  if (input.isDown('lookDown')) fly.pitch = clamp(fly.pitch - dt * 1.2, -1.32, 1.32);
+const vehicles = new VehicleSystem({ world, scene, player, seed: world.seed });
+const traffic = new TrafficSystem({ world, seed: world.seed, player, vehicles, count: 30 });
+vehicles.setTraffic(traffic);
+const pedestrians = new PedestrianSystem({ world, scene, seed: world.seed, player, traffic, vehicles, count: 32 });
+player.vehicles = vehicles;
 
-  const boost = input.isDown('sprint') ? 3.2 : 1;
-  const forward = input.isDown('forward') ? 1 : 0;
-  const back = input.isDown('back') ? 1 : 0;
-  const left = input.isDown('left') ? 1 : 0;
-  const right = input.isDown('right') ? 1 : 0;
-  const moveForward = (forward - back) * fly.speed * boost * dt;
-  const moveSide = (right - left) * fly.speed * boost * dt;
-  fly.x += -Math.sin(fly.yaw) * moveForward + Math.cos(fly.yaw) * moveSide;
-  fly.z += -Math.cos(fly.yaw) * moveForward - Math.sin(fly.yaw) * moveSide;
-  if (input.isDown('jump')) fly.y += fly.speed * boost * dt;
-  if (input.isDown('crouch')) fly.y -= fly.speed * boost * dt;
-  fly.y = clamp(fly.y, 1.2, 220);
-  fly.x = clamp(fly.x, -900, 1240);
-  fly.z = clamp(fly.z, -950, 650);
+const cameraRig = new OrbitCamera({ camera, world, input, player, vehicles });
+cameraRig.yaw = player.heading;
+cameraRig.anchor.x = player.position.x;
+cameraRig.anchor.y = player.position.y + 1.45;
+cameraRig.anchor.z = player.position.z;
 
-  camera.position.set(fly.x, fly.y, fly.z);
-  camera.rotation.set(fly.pitch, fly.yaw, 0);
-}
+const hud = createHud();
+const shots = new ShotRig({
+  renderer,
+  scene,
+  camera,
+  world,
+  clock,
+  weather,
+  settings,
+  input,
+  loop,
+  bus,
+  player,
+  vehicles,
+  traffic,
+  pedestrians,
+  cameraRig,
+  hud,
+});
 
 // ---------------------------------------------------------------- clock + weather
 clock.update(0);
@@ -106,6 +109,8 @@ weather.update(0);
 
 // ---------------------------------------------------------------- loop
 let firstFrame = true;
+let hudClock = 0;
+let lastPrompt = '';
 
 function onUpdate(dt) {
   if (loop.paused) return;
@@ -113,6 +118,19 @@ function onUpdate(dt) {
   weather.update(dt);
   const palette = clock.palette();
   world.update(dt, { palette, weather, camera });
+
+  // Order matters: the driven car moves, then the body follows (or walks), then the
+  // actors that react to both, then the instanced fleet is rebuilt from the result.
+  vehicles.update(dt, input);
+  player.update(dt, { input, cameraYaw: cameraRig.yaw });
+  traffic.update(dt);
+  pedestrians.update(dt);
+  vehicles.paint();
+
+  world.state.district = world.districtAt(player.position.x, player.position.z);
+  world.state.hour = clock.hour;
+  world.state.nearbyTraffic = traffic.cars.filter((car) => Math.hypot(car.x - player.position.x, car.z - player.position.z) < 90).length;
+  world.state.nearbyPeds = pedestrians.peds.filter((ped) => Math.hypot(ped.x - player.position.x, ped.z - player.position.z) < 60).length;
   sky.update(dt, camera);
 }
 
@@ -127,22 +145,55 @@ function onRender(frameSeconds) {
     clock.advance(1);
     bus.emit('game:timeskip', { hour: clock.hour });
   }
+  if (!shots.active) {
+    if (input.keyPressed('KeyF') || input.keyPressed('KeyE')) {
+      const stolen = vehicles.tryEnter(player);
+      if (player.car) cameraRig.timeSinceLook = 0;
+      bus.emit('game:interact', { driving: Boolean(player.car), stolen });
+    }
+    if (input.keyPressed('KeyV')) {
+      cameraRig.toggleMode();
+      bus.emit('camera:mode', { firstPerson: cameraRig.firstPerson });
+    }
+  }
 
   const palette = clock.palette();
   scene.fog.color.setRGB(...palette.fogColor);
   scene.fog.density = palette.fogDensity * weather.fogMultiplier;
-  setExposure(renderer, palette.exposure * weather.exposureBias);
+  setExposure(renderer, palette.exposure * weather.exposureBias * (shots.active ? shots.exposure : 1));
   sky.setPalette(palette, weather);
+
   if (shots.active) {
     shots.update(frameSeconds);
   } else {
-    updateFlyCamera(Math.min(frameSeconds, 0.1));
+    cameraRig.update(Math.min(frameSeconds, 0.1), { car: vehicles.activeCar });
   }
+
+  hudClock += frameSeconds;
+  if (hudClock >= 1 / 6) {
+    hudClock = 0;
+    const prompt = vehicles.prompt();
+    if (prompt !== lastPrompt) {
+      lastPrompt = prompt;
+      world.state.prompt = prompt;
+    }
+    hud.update({
+      districtName: world.districts[world.state.district]?.name ?? 'Solmara',
+      hour: clock.hour,
+      mode: vehicles.activeCar ? 'driving' : 'foot',
+      vehicle: vehicles.activeCar?.name,
+      speed: Math.abs(vehicles.activeCar?.speed ?? 0) * 3.6,
+      prompt,
+    });
+  }
+
   perf.update(frameSeconds, {
     phase: `${palette.label} ${palette.phase}`,
     district: world.districtAt(camera.position.x, camera.position.z),
     seed: world.seed,
     paused: loop.paused ? 'yes' : 'no',
+    traffic: `${traffic.cars.length} cars`,
+    peds: `${pedestrians.peds.length} peds`,
   });
   renderer.render(scene, camera);
   input.resetFrame();
@@ -183,8 +234,21 @@ window.__GAME = {
   loop,
   bus,
   shots,
-  fly,
+  player,
+  cameraRig,
+  rig: cameraRig,
+  vehicles,
+  traffic,
+  pedestrians,
+  hud,
   stats: world.stats,
+  state: world.state,
+  counts: () => ({
+    traffic: traffic.cars.length,
+    peds: pedestrians.peds.length,
+    parked: vehicles.visibleParked.length,
+    fleet: vehicles.fleet.drawn,
+  }),
 };
 
 // F3 toggles the frame readout from anywhere, even while paused.
@@ -196,5 +260,5 @@ window.addEventListener('keydown', (event) => {
 });
 
 bootStatus(
-  `${world.stats.buildings} buildings · ${world.stats.props} props · ${world.stats.nodes} junctions — press F3 for frames`,
+  `${world.stats.buildings} buildings · ${traffic.cars.length} cars · ${pedestrians.peds.length} people — press F3 for frames`,
 );
