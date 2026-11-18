@@ -77,6 +77,7 @@ export class PedestrianSystem {
     this.quaternion = new THREE.Quaternion();
     this.yawQuat = new THREE.Quaternion();
     this.swingQuat = new THREE.Quaternion();
+    this.lyingQuat = new THREE.Quaternion();
     this.yAxis = new THREE.Vector3(0, 1, 0);
     this.xAxis = new THREE.Vector3(1, 0, 0);
     this.color = new THREE.Color();
@@ -164,6 +165,9 @@ export class PedestrianSystem {
       pants: this.random.pick(PANTS),
       skin: this.random.pick(SKINS),
       hat: hatRoll < 0.45 ? this.random.pick(HATS) : null,
+      health: 100,
+      dead: false,
+      deadTimer: 0,
       fleeTimer: 0,
       fleeCooldown: 0,
       threat: { x: 0, z: 0 },
@@ -298,6 +302,10 @@ export class PedestrianSystem {
     let fleeing = 0;
     let crossing = 0;
     for (const ped of this.peds) {
+      if (ped.dead) {
+        ped.deadTimer = (ped.deadTimer ?? 0) - dt;
+        continue;
+      }
       if (ped.fleeCooldown > 0) ped.fleeCooldown -= dt;
       this.threaten(ped, dt);
       this.stepPed(ped, dt);
@@ -429,14 +437,38 @@ export class PedestrianSystem {
     for (let index = 0; index < this.peds.length; index += 1) {
       const ped = this.peds[index];
       const height = ped.height;
+      const cos = Math.cos(ped.heading);
+      const sin = Math.sin(ped.heading);
+      this.yawQuat.setFromAxisAngle(this.yAxis, ped.heading);
+      this.scale.set(height, height, height);
+
+      // A body on the ground: the same seven boxes, laid out flat in a loose heap. The
+      // hit particles already told the story; this only has to read at a glance.
+      if (ped.dead) {
+        this.lyingQuat.setFromAxisAngle(this.xAxis, -1.42);
+        this.quaternion.copy(this.yawQuat).multiply(this.lyingQuat);
+        const lay = (mesh, ox, oz, colorHex, at = index) => {
+          this.position.set(ped.x + ox * cos + oz * sin, 0.24, ped.z - ox * sin + oz * cos);
+          this.matrix.compose(this.position, this.quaternion, this.scale);
+          mesh.setMatrixAt(at, this.matrix);
+          mesh.setColorAt(at, this.color.set(colorHex));
+        };
+        lay(meshes.torso, 0, 0, ped.jacket);
+        lay(meshes.head, 0, 0.5, ped.skin);
+        if (ped.hat) {
+          lay(meshes.hat, 0, 0.62, ped.hat, hats);
+          hats += 1;
+        }
+        lay(meshes.legL, -0.1, -0.5, ped.pants);
+        lay(meshes.legR, 0.12, -0.46, ped.pants);
+        lay(meshes.armL, -0.28, 0.1, ped.jacket);
+        lay(meshes.armR, 0.28, 0.16, ped.jacket);
+        continue;
+      }
+
       const moving = clamp(ped.speed / 2.2, 0, 1);
       const swing = Math.sin(ped.phase) * (0.3 + clamp(ped.speed / 5, 0, 1) * 0.52) * (ped.speed > 0.1 ? 1 : 0);
       const hip = 0.84 * height;
-      const cos = Math.cos(ped.heading);
-      const sin = Math.sin(ped.heading);
-
-      this.yawQuat.setFromAxisAngle(this.yAxis, ped.heading);
-      this.scale.set(height, height, height);
       const place = (mesh, offsetX, offsetY, offsetZ, swingAngle, colorHex, at = index) => {
         const wx = ped.x + offsetX * cos + offsetZ * sin;
         const wz = ped.z - offsetX * sin + offsetZ * cos;
@@ -477,7 +509,8 @@ export class PedestrianSystem {
     const focus = this.focus;
     for (let index = this.peds.length - 1; index >= 0; index -= 1) {
       const ped = this.peds[index];
-      if (Math.hypot(ped.x - focus.x, ped.z - focus.z) > DESPAWN) {
+      const dead = Boolean(ped.dead) && (ped.deadTimer ?? 0) <= 0;
+      if (dead || Math.hypot(ped.x - focus.x, ped.z - focus.z) > DESPAWN) {
         const replacement = this.makePed();
         if (replacement) this.peds[index] = replacement;
         else this.peds.splice(index, 1);
