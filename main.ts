@@ -11,7 +11,7 @@
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
-import { cpSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier, readGameTree } from './vendor/makefun-game.ts';
@@ -116,6 +116,40 @@ process.stdout.write(
     `; index.html ${kib(statSync(indexPath).size)}` +
     `${biggest ? `, largest source ${biggest.path} ${kib(biggest.bytes)}` : ''}\n`,
 );
+
+// ------------------------------------------------------------------ modules
+// Every own ES module in boot order, with the line count a reviewer can scan. The
+// listing is read from game/ itself, so it can never drift from what ships.
+const moduleRows = modules
+  .slice()
+  .sort((a, b) => a.path.localeCompare(b.path))
+  .map((file) => {
+    const source = readFileSync(join(gameDir, file.path), 'utf8');
+    const lines = source.endsWith('\n') ? source.split('\n').length - 1 : source.split('\n').length;
+    return { path: file.path, lines, bytes: file.bytes };
+  });
+const totalLines = moduleRows.reduce((sum, row) => sum + row.lines, 0);
+process.stdout.write(`solmara: ${moduleRows.length} own modules, ${totalLines.toLocaleString('en-US')} lines\n`);
+for (const row of moduleRows) {
+  process.stdout.write(`  ${row.path.padEnd(34)} ${String(row.lines).padStart(5)} lines  ${kib(row.bytes).padStart(8)}\n`);
+}
+
+// ------------------------------------------------------------------ screenshots
+const screenshotsDir = join(here, 'screenshots');
+let shotRows = [];
+if (existsSync(screenshotsDir)) {
+  shotRows = readdirSync(screenshotsDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && !entry.name.startsWith('.'))
+    .map((entry) => ({ name: entry.name, bytes: statSync(join(screenshotsDir, entry.name)).size }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+const shotBytes = shotRows.reduce((sum, row) => sum + row.bytes, 0);
+process.stdout.write(
+  shotRows.length
+    ? `solmara: screenshots: ${shotRows.length} files, ${kib(shotBytes)} (cover ${shotRows[0].name})\n`
+    : 'solmara: screenshots: none yet — capture ?shot=cover and ?shot=night before handing in\n',
+);
+for (const row of shotRows) process.stdout.write(`  ${row.name.padEnd(28)} ${kib(row.bytes).padStart(8)}\n`);
 
 // ------------------------------------------------------------------ hand it in
 mkdirSync(out, { recursive: true });
