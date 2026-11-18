@@ -1,0 +1,12 @@
+[
+  {
+    "name": "cover",
+    "query": "?shot=cover&seed=1",
+    "description": "Avenida Sol at golden hour: the camera drifts south-west down the downtown boulevard, sun low over the harbour, towers behind."
+  },
+  {
+    "name": "night",
+    "query": "?shot=night&seed=1",
+    "description": "The Neon Strip after midnight: lit windows, streetlights and blade signs under the moon."
+  }
+]
