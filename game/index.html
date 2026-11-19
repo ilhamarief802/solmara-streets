@@ -40,8 +40,11 @@
       </div>
     </div>
 
-    <!-- Three.js is vendored beside the page: no build step and no network request.
-         The deterministic shot rig is selected with ?shot=…, handled in src/shots/rig.js. -->
+    <!-- Three.js is vendored beside the page: no build step and no network request. It is a
+         classic script (not a module) so it defines the global THREE before any module runs.
+         The entry module is loaded as a module, so it executes after the document is parsed
+         and the canvas above already exists. The deterministic shot rig is selected with
+         ?shot=…, handled in src/shots/rig.js. -->
     <script src="./vendor/three.min.js"></script>
     <script type="module" src="./src/main.js"></script>
   </body>
