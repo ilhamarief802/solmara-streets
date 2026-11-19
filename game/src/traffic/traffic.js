@@ -202,9 +202,11 @@ export class TrafficSystem {
   placeAhead(x, z, heading, { distance = 32, count = 3, spacing = 16 } = {}) {
     const found = this.laneNear(x, z, heading);
     if (!found) return 0;
+    // A short lane must not clamp to a negative position: the car would sit off its start.
+    const last = Math.max(4, found.lane.length - 10);
     let placed = 0;
     for (let index = 0; index < count; index += 1) {
-      const s = clamp(found.along + distance + index * spacing, 4, found.lane.length - 10);
+      const s = clamp(found.along + distance + index * spacing, 4, last);
       const car = this.makeCar(found.lane, s);
       if (!car) continue;
       this.cars.push(car);

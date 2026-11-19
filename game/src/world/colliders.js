@@ -158,7 +158,12 @@ export class ColliderWorld {
 
     let platformTop = null;
     for (const platform of this.platforms) {
-      if (x < platform.minX || x > platform.maxX || z < platform.minZ || z > platform.maxZ) continue;
+      // min/max are normalised on registration, but a caller may hand them over reversed.
+      const minX = Math.min(platform.minX, platform.maxX);
+      const maxX = Math.max(platform.minX, platform.maxX);
+      const minZ = Math.min(platform.minZ, platform.maxZ);
+      const maxZ = Math.max(platform.minZ, platform.maxZ);
+      if (x < minX || x > maxX || z < minZ || z > maxZ) continue;
       if (platformTop === null || platform.top > platformTop) platformTop = platform.top;
     }
     // A deck over the sea still stands above the water line.
