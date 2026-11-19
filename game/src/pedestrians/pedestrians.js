@@ -113,6 +113,16 @@ export class PedestrianSystem {
     this.focus.z = z;
   }
 
+  /** Changes the crowd size without reseeding the pavements. Menus call this. */
+  setCount(count) {
+    const next = Math.max(0, Math.min(CAPACITY, Math.round(count)));
+    this.count = next;
+    if (this.peds.length > next) this.peds.length = next;
+    else if (this.peds.length < next) this.fill();
+    this.draw(0);
+    return this.peds.length;
+  }
+
   /** A block whose pavement is SPAWN_MIN..SPAWN_MAX metres from the focus. */
   pickBlock() {
     for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -289,6 +299,8 @@ export class PedestrianSystem {
       const nx = ped.x + Math.sin(angle) * step;
       const nz = ped.z + Math.cos(angle) * step;
       const surface = walk.surfaceAt(nx, nz);
+      const solid = this.world.colliders?.blockedAt?.(nx, nz, 0.24);
+      if (solid) continue;
       if (surface.kind === 'pavement') return { x: nx, z: nz };
       // A ped already in the crossing may keep running along it.
       if (ped.mode === 'crossing' && surface.kind === 'road') return { x: nx, z: nz };
@@ -411,8 +423,21 @@ export class PedestrianSystem {
       return;
     }
     const step = Math.min(speed * dt, distance);
-    ped.x += (dx / distance) * step;
-    ped.z += (dz / distance) * step;
+    const nx = ped.x + (dx / distance) * step;
+    const nz = ped.z + (dz / distance) * step;
+    // A corner or a wall between here and the next point: do not walk through it. Step
+    // back onto the pavement ring and take the next leg instead.
+    if (this.world.colliders?.blockedAt?.(nx, nz, 0.24)) {
+      if (ped.mode === 'crossing') ped.mode = 'ring';
+      const corners = this.world.walk.ring(ped.block);
+      ped.corner = (ped.corner + 1) % 4;
+      ped.nextCorner = (ped.corner + 1) % 4;
+      ped.target = corners[ped.nextCorner];
+      ped.heading = Math.atan2(ped.target.x - ped.x, ped.target.z - ped.z);
+      return;
+    }
+    ped.x = nx;
+    ped.z = nz;
     ped.heading = dampAngle(ped.heading, Math.atan2(dx, dz), 7, dt);
     ped.phase += step * 5.6;
 

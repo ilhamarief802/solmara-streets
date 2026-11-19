@@ -11,6 +11,7 @@ import { GameLoop } from './core/loop.js';
 import { createInput } from './core/input.js';
 import { GameClock } from './core/clock.js';
 import { createWeather } from './core/weather.js';
+import { createRain } from './core/rain.js';
 import { createAtmosphere } from './core/sky.js';
 import { createWorld } from './world/world.js';
 import { bus } from './core/events.js';
@@ -21,17 +22,33 @@ import { VehicleSystem } from './vehicles/vehicles.js';
 import { TrafficSystem } from './traffic/traffic.js';
 import { PedestrianSystem } from './pedestrians/pedestrians.js';
 import { createHud } from './hud/hud.js';
+import { Combat } from './combat/combat.js';
+import { PoliceSystem } from './police/police.js';
+import { MissionSystem } from './missions/missions.js';
+import { createAudio } from './audio/audio.js';
+import { createMenus } from './menus/menu.js';
+import { applySettings, loadSave, snapshotGame, writeSave } from './state/save.js';
+
+// A save written by an earlier run shapes the boot: settings first (the renderer reads
+// them at construction), then the story is restored later, after the systems exist.
+const bootSave = loadSave();
+if (bootSave) applySettings(bootSave, settings);
 
 installErrorOverlay();
 window.__SHOT_READY = false;
-window.__SOLMARA_VERSION = '0.2.0-streets';
+window.__SOLMARA_VERSION = '0.3.0-streets';
 
 bootStatus('Waking Solmara…');
 
 const canvas = document.getElementById('viewport');
 const renderer = createRenderer(canvas, settings);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.35, renderer.userData.software ? 3000 : 4600);
+const camera = new THREE.PerspectiveCamera(
+  settings.fov,
+  window.innerWidth / window.innerHeight,
+  0.35,
+  settings.drawDistance,
+);
 camera.rotation.order = 'YXZ';
 renderer.userData.camera = camera;
 
@@ -72,10 +89,20 @@ const player = new Player({
 });
 
 const vehicles = new VehicleSystem({ world, scene, player, seed: world.seed });
-const traffic = new TrafficSystem({ world, seed: world.seed, player, vehicles, count: 30 });
+const traffic = new TrafficSystem({ world, seed: world.seed, player, vehicles, count: settings.trafficCount });
 vehicles.setTraffic(traffic);
-const pedestrians = new PedestrianSystem({ world, scene, seed: world.seed, player, traffic, vehicles, count: 32 });
+const pedestrians = new PedestrianSystem({
+  world,
+  scene,
+  seed: world.seed,
+  player,
+  traffic,
+  vehicles,
+  count: settings.pedestrianCount,
+});
 player.vehicles = vehicles;
+const rain = createRain(scene, { seed: 11 });
+rain.setWeather(weather.current.id);
 
 const cameraRig = new OrbitCamera({ camera, world, input, player, vehicles });
 cameraRig.yaw = player.heading;
@@ -83,7 +110,46 @@ cameraRig.anchor.x = player.position.x;
 cameraRig.anchor.y = player.position.y + 1.45;
 cameraRig.anchor.z = player.position.z;
 
-const hud = createHud();
+const hud = createHud(world);
+
+// The fighting layer, the police response and the story, in that order: each one hands
+// the next its public surface, and all four talk through the bus.
+const combat = new Combat({
+  scene,
+  camera,
+  world,
+  player,
+  pedestrians,
+  vehicles,
+  cameraRig,
+  hud,
+});
+const police = new PoliceSystem({
+  world,
+  scene,
+  player,
+  vehicles,
+  traffic,
+  pedestrians,
+  combat,
+  cameraRig,
+  hud,
+  seed: world.seed,
+});
+combat.setPolice(police);
+const missions = new MissionSystem({
+  world,
+  scene,
+  player,
+  vehicles,
+  police,
+  combat,
+  hud,
+  seed: world.seed,
+});
+combat.resolveDown = () => (police.isBustedNearby() ? 'busted' : 'wasted');
+combat.effects.setCamera(camera);
+
 const shots = new ShotRig({
   renderer,
   scene,
@@ -101,7 +167,63 @@ const shots = new ShotRig({
   pedestrians,
   cameraRig,
   hud,
+  combat,
+  police,
+  missions,
 });
+
+// ---------------------------------------------------------------- front end + sound
+// One plain object is the game both the menus and window.__GAME see. Sound is created
+// silent and only starts its context on the first gesture; the menus own the pause state.
+const game = {
+  renderer,
+  scene,
+  camera,
+  world,
+  clock,
+  weather,
+  sky,
+  settings,
+  input,
+  loop,
+  bus,
+  shots,
+  player,
+  cameraRig,
+  rig: cameraRig,
+  vehicles,
+  traffic,
+  pedestrians,
+  hud,
+  combat,
+  police,
+  missions,
+  rain,
+  audio: null,
+  menus: null,
+  save: null,
+};
+const audio = createAudio({ settings, bus });
+game.audio = audio;
+const menus = createMenus({ game, settings, audio, perf, onSaved: () => {} });
+game.menus = menus;
+game.save = { snapshot: () => snapshotGame(game), write: (extra) => writeSave({ ...snapshotGame(game), ...extra }) };
+
+// The persisted knobs that are not renderer construction: shadow maps, post layer, input
+// speed and the frame readout.
+renderer.shadowMap.enabled = Boolean(settings.shadows);
+document.body.classList.toggle('post-on', Boolean(settings.postProcessing));
+input.pointerSensitivity = 0.0022 * settings.cameraSensitivity;
+if (settings.showFps) perf.toggle(true);
+
+// Browsers only allow audio after the player has touched the page.
+const unlockAudio = () => audio.unlock();
+window.addEventListener('pointerdown', unlockAudio, { once: true });
+window.addEventListener('keydown', unlockAudio, { once: true });
+
+// Impacts shake the camera; the audio system hears the same events for its own thumps.
+bus.on('vehicle:crash', ({ impact }) => cameraRig.kick(Math.min(0.42, 0.055 + (impact ?? 4) * 0.045)));
+bus.on('police:ram', () => cameraRig.kick(0.22));
 
 // ---------------------------------------------------------------- clock + weather
 clock.update(0);
@@ -110,11 +232,13 @@ weather.update(0);
 // ---------------------------------------------------------------- loop
 let firstFrame = true;
 let hudClock = 0;
+let saveClock = 0;
 let lastPrompt = '';
 
 /** The HUD is read from the same state everything else writes, at most six times a second. */
 function refreshHud() {
-  const prompt = vehicles.prompt();
+  const missionPrompt = missions.prompt();
+  const prompt = missionPrompt || vehicles.prompt();
   if (prompt !== lastPrompt) {
     lastPrompt = prompt;
     world.state.prompt = prompt;
@@ -126,7 +250,21 @@ function refreshHud() {
     vehicle: vehicles.activeCar?.name,
     speed: Math.abs(vehicles.activeCar?.speed ?? 0) * 3.6,
     prompt,
+    money: missions.money,
+    health: combat.health,
+    armour: combat.armour,
+    wanted: police.wanted,
+    weapon: combat.weaponInfo,
+    mission: missions.objective,
+    down: combat.downKind,
+    firing: combat.firingNow,
   });
+  world.state.money = missions.money;
+  world.state.health = Math.round(combat.health);
+  world.state.armour = Math.round(combat.armour);
+  world.state.wanted = police.wanted;
+  world.state.mission = missions.active?.def.id ?? null;
+  world.state.weapon = combat.weaponId;
 }
 
 function onUpdate(dt) {
@@ -137,41 +275,81 @@ function onUpdate(dt) {
   world.update(dt, { palette, weather, camera });
 
   // Order matters: the driven car moves, then the body follows (or walks), then the
-  // actors that react to both, then the instanced fleet is rebuilt from the result.
-  vehicles.update(dt, input);
-  player.update(dt, { input, cameraYaw: cameraRig.yaw });
+  // actors that react to both, then fighting, the response and the story, then the
+  // instanced fleet is rebuilt from the result. While the player is down the body and
+  // car are left where they fell; everything else keeps living.
+  if (!combat.isDown) {
+    vehicles.update(dt, input);
+    player.update(dt, { input, cameraYaw: cameraRig.yaw });
+  }
   traffic.update(dt);
   pedestrians.update(dt);
+  combat.update(dt, { input });
+  police.update(dt);
+  missions.update(dt);
   vehicles.paint();
 
   world.state.district = world.districtAt(player.position.x, player.position.z);
   world.state.hour = clock.hour;
   world.state.nearbyTraffic = traffic.cars.filter((car) => Math.hypot(car.x - player.position.x, car.z - player.position.z) < 90).length;
   world.state.nearbyPeds = pedestrians.peds.filter((ped) => Math.hypot(ped.x - player.position.x, ped.z - player.position.z) < 60).length;
+  rain.setWeather(weather.current.id);
+  rain.update(dt, camera);
   sky.update(dt, camera);
+
+  // A quiet autosave while playing. Shots never write: their posed world is not a save.
+  if (!shots.active && !menus.screen) {
+    saveClock += dt;
+    if (saveClock >= 10) {
+      saveClock = 0;
+      writeSave(snapshotGame(game));
+    }
+  }
 }
 
 function onRender(frameSeconds) {
   // Keys are read here, once per frame, so pause and time-skip work even while the
-  // fixed-step simulation is stopped.
-  if (input.keyPressed('KeyP')) {
-    loop.togglePaused();
-    bus.emit('game:pause', { paused: loop.paused });
+  // fixed-step simulation is stopped. The menu owns P and Escape when it is open.
+  if (input.keyPressed('KeyP') && !shots.active) {
+    if (menus.screen) menus.resume();
+    else menus.pause();
   }
-  if (input.keyPressed('KeyT')) {
+  if (input.keyPressed('KeyT') && !menus.screen && !shots.active) {
     clock.advance(1);
     bus.emit('game:timeskip', { hour: clock.hour });
   }
-  if (!shots.active) {
-    if (input.keyPressed('KeyF') || input.keyPressed('KeyE')) {
-      const stolen = vehicles.tryEnter(player);
-      if (player.car) cameraRig.timeSinceLook = 0;
-      refreshHud();
-      bus.emit('game:interact', { driving: Boolean(player.car), stolen });
-    }
-    if (input.keyPressed('KeyV')) {
-      cameraRig.toggleMode();
-      bus.emit('camera:mode', { firstPerson: cameraRig.firstPerson });
+  if (!shots.active && !menus.screen) {
+    if (missions.shopOpen) {
+      // The shop owns the number keys while it is open; no shooting through the menu.
+      combat.suspended = true;
+      if (input.keyPressed('Digit1')) missions.buy(1);
+      if (input.keyPressed('Digit2')) missions.buy(2);
+      if (input.keyPressed('Digit3')) missions.buy(3);
+      if (input.keyPressed('Digit4')) missions.buy(4);
+      if (input.keyPressed('Escape') || input.keyPressed('KeyE')) missions.closeShop();
+    } else {
+      combat.suspended = false;
+      combat.handleInput(input);
+      if (input.keyPressed('KeyE')) {
+        if (!missions.interact()) {
+          const stolen = vehicles.tryEnter(player);
+          if (player.car) cameraRig.timeSinceLook = 0;
+          if (stolen) police.onCarjack(player.position.x, player.position.z);
+          refreshHud();
+          bus.emit('game:interact', { driving: Boolean(player.car), stolen });
+        }
+      }
+      if (input.keyPressed('KeyF')) {
+        const stolen = vehicles.tryEnter(player);
+        if (player.car) cameraRig.timeSinceLook = 0;
+        if (stolen) police.onCarjack(player.position.x, player.position.z);
+        refreshHud();
+        bus.emit('game:interact', { driving: Boolean(player.car), stolen });
+      }
+      if (input.keyPressed('KeyV')) {
+        cameraRig.toggleMode();
+        bus.emit('camera:mode', { firstPerson: cameraRig.firstPerson });
+      }
     }
   }
 
@@ -180,6 +358,21 @@ function onRender(frameSeconds) {
   scene.fog.density = palette.fogDensity * weather.fogMultiplier;
   setExposure(renderer, palette.exposure * weather.exposureBias * (shots.active ? shots.exposure : 1));
   sky.setPalette(palette, weather);
+
+  // The page itself reacts to the hour and the weather: night HUD ink, the wet tint and
+  // the windscreen streaks all read these classes.
+  const night = clock.hour >= 19.6 || clock.hour < 6.4;
+  document.body.classList.toggle('is-night', night);
+  document.body.classList.toggle('is-rain', rain.isRaining);
+  document.body.classList.toggle('is-driving', Boolean(vehicles.activeCar));
+  menus.update(frameSeconds);
+  audio.update(frameSeconds, {
+    car: vehicles.activeCar,
+    wanted: police.wanted,
+    district: world.districtAt(player.position.x, player.position.z),
+    hour: clock.hour,
+    raining: rain.isRaining,
+  });
 
   if (shots.active) {
     shots.update(frameSeconds);
@@ -192,6 +385,16 @@ function onRender(frameSeconds) {
     hudClock = 0;
     refreshHud();
   }
+  const dots = police.mapDots;
+  hud.frame(frameSeconds, {
+    x: player.position.x,
+    z: player.position.z,
+    heading: player.heading,
+    traffic: traffic.cars,
+    cruisers: dots.cruisers,
+    cops: dots.cops,
+    markers: missions.markers,
+  });
 
   perf.update(frameSeconds, {
     phase: `${palette.label} ${palette.phase}`,
@@ -200,6 +403,8 @@ function onRender(frameSeconds) {
     paused: loop.paused ? 'yes' : 'no',
     traffic: `${traffic.cars.length} cars`,
     peds: `${pedestrians.peds.length} peds`,
+    wanted: `${police.wanted} stars · ${police.cruisers.length} cruisers · ${police.cops.length} cops`,
+    money: `$${missions.money}`,
   });
   renderer.render(scene, camera);
   input.resetFrame();
@@ -215,14 +420,39 @@ loop.onRender = onRender;
 if (settings.paused) loop.setPaused(true);
 loop.start();
 
+// The two page-level atmosphere layers and the loading fade. They are plain divs so the
+// canvas and the HUD keep their own draw order.
+for (const id of ['post-layer', 'weather-layer']) {
+  const layer = document.createElement('div');
+  layer.id = id;
+  document.body.append(layer);
+}
+const fadeLayer = document.createElement('div');
+fadeLayer.id = 'fade-layer';
+fadeLayer.className = 'is-booting';
+document.body.append(fadeLayer);
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    fadeLayer.classList.add('is-faded');
+    setTimeout(() => fadeLayer.remove(), 1000);
+  });
+});
+
 // ---------------------------------------------------------------- shot boot
+// A capture run starts in the rig, not in the menus: ?shot=<name>&seed=<n>&capture=1.
 const shotParams = parseShotParams();
 if (shotParams.name) {
-  if (!shots.start(shotParams.name, shotParams.seed)) {
+  if (!shots.start(shotParams.name, shotParams.seed, { capture: shotParams.capture })) {
     console.warn(`[solmara] unknown shot "${shotParams.name}"; known: ${Object.keys(SHOTS).join(', ')}`);
   }
 } else {
   document.title = 'Solmara Streets';
+  menus.boot();
+  if (bootSave) {
+    // Continue is one click away, but the story is not applied until the player chooses:
+    // Play resets, Continue restores.
+    bootStatus(`Solmara is open · save from ${new Date(bootSave.savedAt || Date.now()).toLocaleDateString('en-US')}`);
+  }
 }
 
 // ---------------------------------------------------------------- inspection surface
@@ -247,6 +477,12 @@ window.__GAME = {
   traffic,
   pedestrians,
   hud,
+  combat,
+  police,
+  missions,
+  rain,
+  audio,
+  menus,
   stats: world.stats,
   state: world.state,
   counts: () => ({
@@ -254,6 +490,9 @@ window.__GAME = {
     peds: pedestrians.peds.length,
     parked: vehicles.visibleParked.length,
     fleet: vehicles.fleet.drawn,
+    cruisers: police.cruisers.length,
+    cops: police.cops.length,
+    thugs: combat.thugs.length,
   }),
 };
 
@@ -264,6 +503,9 @@ window.addEventListener('keydown', (event) => {
     perf.toggle();
   }
 });
+
+window.__MENU = menus;
+window.__SOLMARA_SAVE = () => snapshotGame(game);
 
 bootStatus(
   `${world.stats.buildings} buildings · ${traffic.cars.length} cars · ${pedestrians.peds.length} people — press F3 for frames`,

@@ -31,6 +31,7 @@ export class MissionSystem {
     this.checkpointIndex = 0;
     this.shopOpen = false;
     this.silent = false;
+    this.markersHidden = false;
     this.markerPulse = 0;
     this.shopPulse = 0;
     this.stats = { completed: 0, failed: 0, spent: 0, earned: 0 };
@@ -82,7 +83,7 @@ export class MissionSystem {
   }
 
   updateMarker(marker, x, z, dt, pulse) {
-    if (x === null) {
+    if (x === null || this.markersHidden) {
       marker.group.visible = false;
       return;
     }
@@ -124,6 +125,7 @@ export class MissionSystem {
 
   /** For the minimap: mission diamond plus the shop. */
   get markers() {
+    if (this.markersHidden) return [];
     const point = this.markerPoint;
     return [
       { x: point?.x ?? 0, z: point?.z ?? 0, kind: 'mission', hidden: !point },

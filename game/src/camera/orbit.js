@@ -194,9 +194,12 @@ export class OrbitCamera {
       this._target.y = py + forward.y * 4;
       this._target.z = pz + forward.z * 4;
     } else {
-      this._target.x = this.anchor.x + Math.sin(this.yaw) * speedLead;
+      // In a car the camera looks down the bonnet, not down the old mouse yaw: the
+      // target leads along the car's heading so the road opens up before the turn.
+      const lookHeading = driving ? car.heading : this.yaw;
+      this._target.x = this.anchor.x + Math.sin(lookHeading) * speedLead;
       this._target.y = this.anchor.y + 0.1;
-      this._target.z = this.anchor.z + Math.cos(this.yaw) * speedLead;
+      this._target.z = this.anchor.z + Math.cos(lookHeading) * speedLead;
     }
 
     this.camera.position.set(px, py, pz);

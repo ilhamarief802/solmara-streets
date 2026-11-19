@@ -77,6 +77,15 @@ export class TrafficSystem {
     return this.cars.length;
   }
 
+  /** Changes the target fleet size without reseeding the world. Menus call this. */
+  setCount(count) {
+    const next = Math.max(0, Math.min(48, Math.round(count)));
+    this.count = next;
+    if (this.cars.length > next) this.cars.length = next;
+    else if (this.cars.length < next) this.fill();
+    return this.cars.length;
+  }
+
   /** Depending on distance to the player, the point new cars appear around. */
   setFocus(x, z) {
     this.focusPoint.x = x;
@@ -133,6 +142,7 @@ export class TrafficSystem {
       heading: Math.atan2(chosen.dirX, chosen.dirZ),
       nextLane: null,
       patience: 0,
+      stuck: 0,
       braking: false,
       wheelSpin: this.random.range(0, 6),
       driver: this.random.int(0, 999),
@@ -258,6 +268,20 @@ export class TrafficSystem {
       const car = this.cars[index];
       this.stepCar(car, dt);
       if (car.speed < 0.35) stops += 1;
+      // A car that has sat at the front of a lane for too long is posted back out to a
+      // fresh lane: a junction deadlock clears itself instead of growing a queue.
+      if (Math.abs(car.speed) < 0.25) car.stuck = (car.stuck ?? 0) + dt;
+      else car.stuck = 0;
+      if ((car.stuck ?? 0) > 13 && this.pathGap(car) > 10) {
+        const lane = this.pickSpawnLane();
+        if (lane) {
+          car.lane = lane;
+          car.s = this.random.range(6, Math.max(8, lane.length - 8));
+          car.nextLane = null;
+          car.stuck = 0;
+          car.speed = car.desired * 0.5;
+        }
+      }
     }
     this.stats.stops = stops;
 

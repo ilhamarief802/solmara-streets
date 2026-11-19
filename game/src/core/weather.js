@@ -35,6 +35,15 @@ export const WEATHER_TYPES = {
     cloud: 0.85,
     exposure: 1.06,
   },
+  rain: {
+    id: 'rain',
+    label: 'Rain',
+    fogMultiplier: 1.45,
+    sunMultiplier: 0.4,
+    haze: 0.7,
+    cloud: 0.92,
+    exposure: 0.96,
+  },
   storm: {
     id: 'storm',
     label: 'Squall',
@@ -46,7 +55,7 @@ export const WEATHER_TYPES = {
   },
 };
 
-const ORDER = ['clear', 'clear', 'clear', 'hazy', 'hazy', 'overcast'];
+const ORDER = ['clear', 'clear', 'clear', 'hazy', 'hazy', 'overcast', 'rain'];
 
 export class Weather {
   constructor(seed = 'solmara-weather') {
