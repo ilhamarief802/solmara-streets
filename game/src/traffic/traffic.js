@@ -33,6 +33,7 @@ function pickType(random) {
     roll -= entry.weight;
     if (roll <= 0) return entry.type;
   }
+  // Floating-point drift at the very end of the range lands on the default.
   return 'sedan';
 }
 
@@ -61,11 +62,13 @@ export class TrafficSystem {
     this.lanes = world.plan.lanes;
     this.lanesFrom = new Map();
     for (const lane of this.lanes) {
+      // A positive offset lane runs a -> b; a negative one runs b -> a.
       lane.startNode = lane.offset > 0 ? lane.edge.a : lane.edge.b;
       lane.endNode = lane.offset > 0 ? lane.edge.b : lane.edge.a;
       lane.axis = lane.edge.axis;
       lane.midX = (lane.from.x + lane.to.x) / 2;
       lane.midZ = (lane.from.z + lane.to.z) / 2;
+      // Index the lanes by the junction they leave from; turning only needs the exit.
       const list = this.lanesFrom.get(lane.endNode);
       if (list) list.push(lane);
       else this.lanesFrom.set(lane.endNode, [lane]);
@@ -90,6 +93,7 @@ export class TrafficSystem {
   setCount(count) {
     const next = Math.max(0, Math.min(48, Math.round(count)));
     this.count = next;
+    // Shrinking drops the tail of the list; growing pulls new cars in around the player.
     if (this.cars.length > next) this.cars.length = next;
     else if (this.cars.length < next) this.fill();
     return this.cars.length;
@@ -103,6 +107,7 @@ export class TrafficSystem {
 
   /** Fills the streets up to `count` cars, deterministically. */
   fill() {
+    // The guard stops a pathological spawn loop when every candidate lane is occupied.
     let guard = 0;
     while (this.cars.length < this.count && guard < this.count * 24) {
       guard += 1;
@@ -120,6 +125,7 @@ export class TrafficSystem {
       if (distance < SPAWN_MIN || distance > SPAWN_MAX) continue;
       return lane;
     }
+    // Nothing fitted the ring; any lane will do rather than no car at all.
     return this.random.pick(this.lanes);
   }
 
@@ -169,6 +175,7 @@ export class TrafficSystem {
     let bestScore = Infinity;
 
     for (const lane of this.lanes) {
+      // Only lanes pointing roughly the same way as the car.
       if (lane.dirX * fx + lane.dirZ * fz < 0.7) continue;
       const px = x - lane.from.x;
       const pz = z - lane.from.z;
@@ -189,8 +196,8 @@ export class TrafficSystem {
   }
 
   /**
-   * Puts a small platoon in the lane ahead of a point. The drive shot uses this so the
-   * frame is guaranteed to have traffic in it; it is deterministic from the seed.
+   * Puts a small platoon in the lane ahead of a point. The drive shot uses this so the frame
+   * is guaranteed to have traffic in it; it is deterministic from the seed.
    */
   placeAhead(x, z, heading, { distance = 32, count = 3, spacing = 16 } = {}) {
     const found = this.laneNear(x, z, heading);
@@ -208,6 +215,7 @@ export class TrafficSystem {
 
   /** The state of the light facing a lane at a junction. */
   lightFor(node, axis) {
+    // The lamp meshes own the clock; the traffic follows it rather than keeping its own.
     const signals = this.world.props?.signals;
     const elapsed = signals ? signals.elapsed : this.elapsed;
     const offset = ((node.i * 3 + node.j * 5) % 26) * 0.9;
@@ -253,6 +261,7 @@ export class TrafficSystem {
       const dz = z - car.z;
       const ahead = dx * fx + dz * fz;
       if (ahead <= 0) return;
+      // Only things inside the car's own width matter.
       const side = Math.abs(dx * rx + dz * rz);
       if (side > halfWidth + 1.55) return;
       if (ahead < gap) gap = ahead;
@@ -328,6 +337,7 @@ export class TrafficSystem {
     if (node && node.signal && remaining < 18 && remaining > 0) {
       const light = this.lightFor(node, lane.axis);
       const stopAt = remaining - 5.2;
+      // An amber light is only run if the car is already too close to stop.
       if (light === 'red' || (light === 'amber' && stopAt > 3)) {
         if (stopAt < desired * 1.2) desired = Math.max(0, stopAt * 0.55);
       }
@@ -359,6 +369,7 @@ export class TrafficSystem {
     car.x = current.from.x + current.dirX * car.s;
     car.z = current.from.z + current.dirZ * car.s;
     car.heading = Math.atan2(current.dirX, current.dirZ);
+    // Traffic runs on the asphalt, never on the pavement or the sand.
     car.y = 0.09;
     car.wheelSpin += car.speed * dt * 2.4;
     car.desired = current.speed * car.factor;

@@ -1,8 +1,8 @@
-// One police cruiser. It is a real body on the road graph, not a traffic agent: it picks
-// the lane that points most directly at the player, takes the junction that shortens the
-// chase, and only leaves the graph for the last thirty metres, when it steers straight at
-// the player. That keeps it on the road (no wall-grinding) while the final approach feels
-// like a pursuit. Roadblock cruisers are the same class with `mode = 'block'`.
+// One police cruiser. It is a real body on the road graph, not a traffic agent: it picks the
+// lane that points most directly at the player, takes the junction that shortens the chase,
+// and only leaves the graph for the last thirty metres, when it steers straight at the
+// player. That keeps it on the road (no wall-grinding) while the final approach feels like a
+// pursuit. Roadblock cruisers are the same class with `mode = 'block'`.
 
 import { clamp, dampAngle, angleDelta, yawToward } from '../core/math.js';
 
@@ -26,6 +26,7 @@ export class PursuitCruiser {
     this.waypoint = { x, z };
     this.retarget = 0;
     this.ramCooldown = 0;
+    // A per-cruiser offset so a group of cruisers does not strobe in lockstep.
     this.blink = Math.random() * 10;
     this.stuckClock = 0;
     this.lastX = x;
@@ -49,8 +50,14 @@ export class PursuitCruiser {
 
     // Two additive pips over the roof bar, so the lights flash beyond the static paint.
     const geometry = new THREE.BoxGeometry(0.44, 0.1, 0.24);
-    const red = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xff2a1f, transparent: true, opacity: 0.9 }));
-    const blue = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0x2a6bff, transparent: true, opacity: 0.9 }));
+    const red = new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({ color: 0xff2a1f, transparent: true, opacity: 0.9 }),
+    );
+    const blue = new THREE.Mesh(
+      geometry,
+      new THREE.MeshBasicMaterial({ color: 0x2a6bff, transparent: true, opacity: 0.9 }),
+    );
     red.position.set(-0.3, 1.66, -0.12);
     blue.position.set(0.3, 1.66, -0.12);
     view.group.add(red, blue);
@@ -62,6 +69,7 @@ export class PursuitCruiser {
     let best = null;
     let bestDistance = Infinity;
     for (const lane of world.plan.lanes) {
+      // The lane's midpoint is close enough for a "which street is this" question.
       const midX = lane.from.x + lane.dirX * lane.length * 0.5;
       const midZ = lane.from.z + lane.dirZ * lane.length * 0.5;
       const distance = Math.hypot(midX - x, midZ - z);
@@ -79,6 +87,7 @@ export class PursuitCruiser {
     let bestScore = Infinity;
 
     for (const lane of this.world.plan.lanes) {
+      // Only lanes that leave the junction the cruiser is arriving at.
       if (endNode && lane.startNode !== endNode) continue;
       if (lane === this.lane) continue;
       const end = this.laneEnd(lane);
@@ -147,6 +156,7 @@ export class PursuitCruiser {
 
     const desired = yawToward(this.x, this.z, targetX, targetZ);
     const turn = angleDelta(this.heading, desired);
+    // A faster car turns tighter, up to a limit.
     const turnRate = clamp(1.2 + Math.abs(this.speed) * 0.055, 1.2, 2.4);
     this.heading = dampAngle(this.heading, desired, turnRate * 2.2, dt);
 
@@ -161,6 +171,7 @@ export class PursuitCruiser {
     const nx = this.x + Math.sin(this.heading) * this.speed * dt;
     const nz = this.z + Math.cos(this.heading) * this.speed * dt;
     const resolved = this.world.resolveCircle(nx, nz, this.radius);
+    // Running into a wall costs the cruiser most of its speed.
     if (Math.hypot(resolved.x - nx, resolved.z - nz) > 0.02) this.speed *= 0.55;
     this.x = resolved.x;
     this.z = resolved.z;
@@ -188,6 +199,7 @@ export class PursuitCruiser {
     if (!this.view) return;
     this.view.group.position.set(this.x, this.y, this.z);
     this.view.group.rotation.y = this.heading;
+    // The wheels only need to spin, not to steer: a cruiser is seen from behind at speed.
     for (const wheel of this.view.wheels) wheel.rotation.x += (this.speed / 0.35) * dt;
   }
 

@@ -1,9 +1,9 @@
 // The wanted level and the response to it. Crimes on the bus raise stars, but only when
-// somebody can see them: a pedestrian on the block, an officer, a cruiser. Cruisers spawn
-// on lanes out of the player's view and chase through the road graph; at three stars the
+// somebody can see them: a pedestrian on the block, an officer, a cruiser. Cruisers spawn on
+// lanes out of the player's view and chase through the road graph; at three stars the
 // officers get out and shoot; at four a roadblock appears across the lane ahead. Staying
-// unseen for long enough cools the level down a star at a time. The system owns no HUD:
-// it publishes wanted:change and the HUD reads police.wanted.
+// unseen for long enough cools the level down a star at a time. The system owns no HUD: it
+// publishes wanted:change and the HUD reads police.wanted.
 
 import { clamp, dampAngle } from '../core/math.js';
 import { bus } from '../core/events.js';
@@ -35,7 +35,18 @@ const WITNESS = { cop: 62, cruiser: 80, ped: 42 };
 const NEVER = -99;
 
 export class PoliceSystem {
-  constructor({ world, scene, player, vehicles = null, traffic = null, pedestrians = null, combat = null, cameraRig = null, hud = null, seed = 1 }) {
+  constructor({
+    world,
+    scene,
+    player,
+    vehicles = null,
+    traffic = null,
+    pedestrians = null,
+    combat = null,
+    cameraRig = null,
+    hud = null,
+    seed = 1,
+  }) {
     this.world = world;
     this.scene = scene;
     this.player = player;
@@ -81,6 +92,7 @@ export class PoliceSystem {
       if (list) list.push(lane);
       else this.laneStart.set(lane.startNode, [lane]);
     }
+    // Every lane gets the list of lanes that leave the junction it ends at.
     for (const lane of lanes) {
       const options = this.laneStart.get(lane.endNode);
       if (options) lane.nextOptions = options;
@@ -103,6 +115,7 @@ export class PoliceSystem {
     this.wanted = next;
     if (next > previous) this.lastCrimeAt = this.world.elapsed ?? 0;
     if (next < previous || next === 0) this.calm = 0;
+    // A fresh level means a cruiser should be on its way within the second.
     this.spawnClock = Math.min(this.spawnClock, 0.4);
     bus.emit('wanted:change', { wanted: next, previous, reason, stars: next });
     if (this.hud) {
@@ -197,6 +210,7 @@ export class PoliceSystem {
     return this.threatDistance;
   }
 
+  /** Close enough for the down state to read as an arrest rather than a death. */
   isBustedNearby() {
     return this.wanted > 0 && this.threatDistance < 26;
   }
@@ -220,6 +234,7 @@ export class PoliceSystem {
       if (ahead > 0.25 && distance < 170) continue;
       return lane;
     }
+    // No lane fitted the ring: any lane is better than no response.
     return this.random.pick(lanes);
   }
 
@@ -268,6 +283,7 @@ export class PoliceSystem {
     const { lane } = found;
     const along = clamp(found.along, 4, lane.length - 8);
     let placed = 0;
+    // Two cars, one either side of the centreline.
     for (const offset of [-0.55, 0.55]) {
       if (this.cruisers.length >= MAX_CRUISERS + 2) break;
       const s = clamp(along + offset * 8, 2, lane.length - 4);
@@ -307,6 +323,7 @@ export class PoliceSystem {
       health: 70,
       dead: false,
       deadTimer: 0,
+      // Staggered first shots, so two officers never fire on the same frame.
       cooldown: 0.6 + Math.random() * 0.6,
       object: character.root,
       character,
@@ -324,6 +341,7 @@ export class PoliceSystem {
 
     cop.dead = true;
     cop.deadTimer = 26;
+    // A body on the pavement: flat on its back, a little above the kerb.
     cop.object.rotation.x = -Math.PI / 2;
     cop.object.position.y = cop.y + 0.3;
     this.raise(2, 'copshot', cop.x, cop.z);
@@ -352,7 +370,12 @@ export class PoliceSystem {
       if (this.calm > DECAY_TIME) {
         this.calm = 0;
         this.wanted -= 1;
-        bus.emit('wanted:change', { wanted: this.wanted, previous: this.wanted + 1, reason: 'cooled', stars: this.wanted });
+        bus.emit('wanted:change', {
+          wanted: this.wanted,
+          previous: this.wanted + 1,
+          reason: 'cooled',
+          stars: this.wanted,
+        });
         bus.emit('police:siren', { wanted: this.wanted, active: this.wanted > 0 });
         if (this.wanted === 0) this.dismiss(false);
       }
@@ -377,6 +400,7 @@ export class PoliceSystem {
     const playerCar = this.vehicles?.activeCar ?? null;
     for (let index = this.cruisers.length - 1; index >= 0; index -= 1) {
       const cruiser = this.cruisers[index];
+      // A cruiser still on the road after the heat dies walks away instead of vanishing.
       if (this.wanted === 0 && !cruiser.dismissed) {
         cruiser.dismissed = true;
         cruiser.mode = 'leave';
@@ -408,7 +432,13 @@ export class PoliceSystem {
       }
 
       // Officers deploy once a cruiser is close and slow, at three stars and up.
-      if (this.wanted >= 3 && distance < 34 && cruiser.speed < 3.4 && this.cops.length < MAX_COPS && !cruiser.deployed) {
+      if (
+        this.wanted >= 3 &&
+        distance < 34 &&
+        cruiser.speed < 3.4 &&
+        this.cops.length < MAX_COPS &&
+        !cruiser.deployed
+      ) {
         cruiser.deployed = true;
         cruiser.deployClock = 4;
         this.spawnCop(cruiser.x + 2.2, cruiser.z + 1.2);
@@ -470,6 +500,7 @@ export class PoliceSystem {
       if (distance < 27 && cop.cooldown <= 0 && this.combat && !this.combat.isDown) {
         cop.cooldown = 1.5 + Math.random() * 0.9;
         const originY = cop.y + 1.4;
+        // The muzzle flash at the gun, then the tracer from the gun to the player.
         this.combat.effects.muzzle(cop.x + Math.sin(cop.heading) * 0.45, originY, cop.z + Math.cos(cop.heading) * 0.45, {
           scale: 0.72,
           color: 0xffd9a0,
@@ -487,6 +518,7 @@ export class PoliceSystem {
       }
 
       if (distance > 2.4 && distance < 70) {
+        // Close in faster from a distance than when circling the player.
         const speed = distance > 16 ? 4.2 : 2.6;
         const step = Math.min(speed * dt, distance - 1.8);
         const resolved = this.world.resolveCircle(cop.x + (dx / distance) * step, cop.z + (dz / distance) * step, 0.34);
@@ -511,6 +543,7 @@ export class PoliceSystem {
     if (!car || Math.abs(car.speed) < 4.5) return;
 
     const now = this.world.elapsed ?? 0;
+    // One runover per tick of the clock, so a single pass cannot count a whole crowd.
     if (now - this.lastRunover < 0.3) return;
     const dir = { x: Math.sin(car.heading), z: Math.cos(car.heading) };
 
@@ -539,6 +572,7 @@ export class PoliceSystem {
 
   /** Everyone leaves after a bust, a clear or a scripted reset. */
   dismiss(force = false) {
+    // A soft dismiss only tells the cruisers to leave; a hard one removes them now.
     for (const cruiser of this.cruisers) cruiser.dismissed = true;
     if (!force) return;
     for (const cruiser of this.cruisers) this.scene.remove(cruiser.view.group);
