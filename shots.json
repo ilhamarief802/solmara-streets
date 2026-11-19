@@ -2,21 +2,21 @@
   {
     "name": "cover",
     "query": "?shot=cover&seed=1&capture=1",
-    "description": "The money shot: a stolen coupe on the Avenida Sol at golden hour, with traffic, pedestrians, the money-and-minimap HUD and the downtown skyline closing the boulevard."
+    "description": "Proves the golden-hour city reads at a glance: traffic runs both ways and staged pedestrians work the pavement, the money, health and armour HUD with its minimap stays crisp against the low sun, and the downtown skyline closes the boulevard behind the stolen coupe. Day lighting at its best."
   },
   {
     "name": "chase",
     "query": "?shot=chase&seed=1&capture=1",
-    "description": "Three police cruisers behind the player's coupe, three wanted stars lit, the minimap showing the pursuit and the cruiser lights strobing on the Avenida Sol."
+    "description": "Proves the pursuit systems render: three wanted stars lit on a readable HUD, three police cruisers in formation with strobing lights, and the minimap tracking the chase, while traffic and kerbside pedestrians fill the daylight frame on the Avenida Sol."
   },
   {
     "name": "mission",
     "query": "?shot=mission&seed=1&capture=1",
-    "description": "A live harbour mission: the objective card and clock on the HUD, the mission beacon at the warehouse gate and the map diamond, with the player on foot on the quay."
+    "description": "Proves the mission loop is legible on foot: objective text and clock on the mission card, the world beacon at the fish market and the minimap diamond, with traffic and pedestrians moving along the harbour quay in late-afternoon light."
   },
   {
     "name": "night",
     "query": "?shot=night&seed=1&capture=1",
-    "description": "The Neon Strip after dark: lit windows, blade signs, streetlight pools, a coupe and pedestrians on the lit pavement, and a HUD that stays readable at night."
+    "description": "Proves the city holds up after dark: lit windows and neon blade signs, streetlight pools, a coupe with its lamps on and four pedestrians walking the lit pavements, and a HUD that stays readable against the night sky."
   }
 ]
