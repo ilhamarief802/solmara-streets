@@ -1,7 +1,7 @@
-// The seven districts of Solmara. Each one is a small data record: where it sits, how
-// tall it builds, which facades and neon it likes, and what street furniture it
-// tolerates. The plan zones blocks from these rectangles; buildings, textures and props
-// read the palette and density, so a district looks like itself everywhere.
+// The seven districts of Solmara. Each one is a small data record: where it sits, how tall
+// it builds, which facades and neon it likes, and what street furniture it tolerates. The
+// plan zones blocks from these rectangles; buildings, textures and props read the palette
+// and density, so a district looks like itself everywhere.
 
 export const DISTRICTS = {
   downtown: {
@@ -173,8 +173,8 @@ export const DISTRICT_IDS = ['downtown', 'marina', 'verano', 'neon', 'harbour', 
 /** The playable land rectangle, slightly outside the built districts. */
 export const LAND_BOUNDS = { minX: -920, minZ: -980, maxX: 1280, maxZ: 680 };
 
-// The order rectangles are tested in: the small, specific districts win any overlap
-// with the big downtown and marina rectangles.
+// The order rectangles are tested in: the small, specific districts win any overlap with
+// the big downtown and marina rectangles.
 const LOOKUP_ORDER = ['airstrip', 'harbour', 'beach', 'neon', 'downtown', 'marina', 'verano'];
 
 function inside(bounds, x, z) {
@@ -194,6 +194,7 @@ export function districtIdAt(x, z, isWater = false) {
     if (z > 260 && x < -300) return 'harbour';
     if (x < -45) return 'marina';
   }
+  // Open land outside every rectangle falls back to the nearest reasonable neighbour.
   if (z < -600) return 'neon';
   if (x < -45) return 'marina';
   if (z > 160) return 'verano';

@@ -1,7 +1,7 @@
 // The ground of Solmara: the gritty city base, the beach sand and boardwalk, the harbour
-// quay, the marsh and runway of the airstrip, park lawns and the retaining walls that
-// hold the channel and the shoreline. Flat quads in a handful of merged meshes, so the
-// whole surface costs a few draws. Water is its own shader in water.js.
+// quay, the marsh and runway of the airstrip, park lawns and the retaining walls that hold
+// the channel and the shoreline. Flat quads in a handful of merged meshes, so the whole
+// surface costs a few draws. Water is its own shader in water.js.
 
 import { MeshBuilder, cityMaterial, colorTriple } from './geometry.js';
 import { Random } from '../core/rng.js';
@@ -30,8 +30,8 @@ export function buildTerrain(plan, textures, options = {}) {
 
   // ---------------------------------------------------------------- land base
   // Two large pieces either side of the channel, plus the northern cap over the channel's
-  // head, leaves the channel and the sea uncovered.
-  // The land rectangle, inset from the plan bounds so the sea shows at every edge.
+  // head, leaves the channel and the sea uncovered. The land rectangle is inset from the
+  // plan bounds so the sea shows at every edge.
   const north = -975;
   const south = 638;
   const west = -876;
@@ -54,9 +54,15 @@ export function buildTerrain(plan, textures, options = {}) {
   // ---------------------------------------------------------------- beach
   const beachWidth = BEACH.x1 - BEACH.x0;
   const beachMidX = (BEACH.x0 + BEACH.x1) / 2;
-  sand.plane(beachMidX, (BEACH.z0 + 20 + WATER.seaSouthZ) / 2, beachWidth, WATER.seaSouthZ - BEACH.z0 - 20, 0.015, colorTriple(0xd7c299), {
-    uvScale: 10,
-  });
+  sand.plane(
+    beachMidX,
+    (BEACH.z0 + 20 + WATER.seaSouthZ) / 2,
+    beachWidth,
+    WATER.seaSouthZ - BEACH.z0 - 20,
+    0.015,
+    colorTriple(0xd7c299),
+    { uvScale: 10 },
+  );
   // A wet strip at the waterline, darker and slightly lower.
   sand.plane(beachMidX, WATER.seaSouthZ - 6, beachWidth, 12, 0.004, colorTriple(0xb49d78), { uvScale: 8 });
   // The promenade and the boardwalk.
@@ -82,9 +88,15 @@ export function buildTerrain(plan, textures, options = {}) {
   // ---------------------------------------------------------------- harbour quay
   const harbourWidth = HARBOUR.x1 - HARBOUR.x0;
   const harbourMidX = (HARBOUR.x0 + HARBOUR.x1) / 2;
-  concrete.plane(harbourMidX, (HARBOUR.z0 + HARBOUR.z1) / 2, harbourWidth, HARBOUR.z1 - HARBOUR.z0, 0.02, colorTriple(0xa5a096), {
-    uvScale: 12,
-  });
+  concrete.plane(
+    harbourMidX,
+    (HARBOUR.z0 + HARBOUR.z1) / 2,
+    harbourWidth,
+    HARBOUR.z1 - HARBOUR.z0,
+    0.02,
+    colorTriple(0xa5a096),
+    { uvScale: 12 },
+  );
   // A painted lane down the container yard, and the yellow quay edge.
   concrete.plane(harbourMidX, 470, harbourWidth - 30, 12, 0.03, colorTriple(0x8b877c), { uvScale: 6 });
   concrete.plane(harbourMidX, HARBOUR.quayZ + 18, harbourWidth, 1.6, 0.035, colorTriple(0xd8b24a), { uvScale: 2 });
@@ -104,6 +116,7 @@ export function buildTerrain(plan, textures, options = {}) {
   for (let i = 0; i < 12; i += 1) {
     const x = random.range(AIRSTRIP.x0 + 20, AIRSTRIP.x1 - 20);
     const z = random.range(AIRSTRIP.z0 + 20, AIRSTRIP.z1 - 20);
+    // A pool under the runway would read as a hole in the strip; skip the corridor.
     if (Math.abs(x - AIRSTRIP.runwayX) < 40) continue;
     marsh.plane(x, z, random.range(18, 60), random.range(10, 34), 0.02, reeds, {
       uvScale: 6,
@@ -112,11 +125,15 @@ export function buildTerrain(plan, textures, options = {}) {
   }
 
   const runwayLength = AIRSTRIP.runwayZ1 - AIRSTRIP.runwayZ0;
-  runway.plane(AIRSTRIP.runwayX, (AIRSTRIP.runwayZ0 + AIRSTRIP.runwayZ1) / 2, AIRSTRIP.runwayWidth, runwayLength, 0.03, colorTriple(0x4a4844), {
-    uvScale: 8,
-    repeatX: 1,
-    repeatY: runwayLength / 30,
-  });
+  runway.plane(
+    AIRSTRIP.runwayX,
+    (AIRSTRIP.runwayZ0 + AIRSTRIP.runwayZ1) / 2,
+    AIRSTRIP.runwayWidth,
+    runwayLength,
+    0.03,
+    colorTriple(0x4a4844),
+    { uvScale: 8, repeatX: 1, repeatY: runwayLength / 30 },
+  );
   // Threshold bars at both ends.
   const paint = colorTriple(0xe6e0c8);
   for (let i = -3; i <= 3; i += 1) {
@@ -141,6 +158,7 @@ export function buildTerrain(plan, textures, options = {}) {
 
   // ---------------------------------------------------------------- shore walls
   const wallColor = colorTriple(0x77736a);
+  // The wall tops sit just above the pavement; the bottoms are under the waterline.
   const wallBottom = -2.2;
   const wallHeight = 0.22 - wallBottom;
   const channelSpan = (WATER.channelZ0 + WATER.seaSouthZ) / 2;
@@ -149,9 +167,16 @@ export function buildTerrain(plan, textures, options = {}) {
   walls.box(WATER.channelX0 - 1.2, wallBottom, channelSpan, 2.4, wallHeight, channelLength, wallColor, { uvScale: 6 });
   walls.box(WATER.channelX1 + 1.2, wallBottom, channelSpan, 2.4, wallHeight, channelLength, wallColor, { uvScale: 6 });
   // The sea wall along the south shore, broken by the beach sand, and the west shore.
-  walls.box((HARBOUR.x0 + BEACH.x0) / 2, wallBottom, WATER.seaSouthZ + 1.2, BEACH.x0 - HARBOUR.x0, wallHeight, 2.4, wallColor, {
-    uvScale: 6,
-  });
+  walls.box(
+    (HARBOUR.x0 + BEACH.x0) / 2,
+    wallBottom,
+    WATER.seaSouthZ + 1.2,
+    BEACH.x0 - HARBOUR.x0,
+    wallHeight,
+    2.4,
+    wallColor,
+    { uvScale: 6 },
+  );
   walls.box(WATER.seaWestX - 1.2, wallBottom, midZ, 2.4, wallHeight, south - north, wallColor, { uvScale: 6 });
 
   // ---------------------------------------------------------------- materials

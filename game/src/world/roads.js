@@ -1,7 +1,7 @@
 // Streets: asphalt ribbons with lane paint, junction caps, zebra crossings, the raised
 // pavements and kerbs around every block, and the elevated ring highway with its pillars
-// and guard rails. Each surface class is merged into one mesh, so the whole street grid
-// is a dozen draw calls rather than a thousand.
+// and guard rails. Each surface class is merged into one mesh, so the whole street grid is
+// a dozen draw calls rather than a thousand.
 
 import { MeshBuilder, cityMaterial, colorTriple } from './geometry.js';
 import { Random } from '../core/rng.js';
@@ -45,6 +45,7 @@ export function buildRoads(plan, textures, options = {}) {
       (edge.ax + edge.bx) / 2,
       (edge.az + edge.bz) / 2,
       edge.width,
+      // One extra metre each end hides the seam under the junction cap.
       edge.length + 1,
       ROAD_Y,
       white,
@@ -221,6 +222,7 @@ export function buildHighway(plan, textures, colliders, options = {}) {
       const ay = fromY + ((toY - fromY) * i) / steps;
       const by = fromY + ((toY - fromY) * (i + 1)) / steps;
 
+      // One quad per step: the stepped look is cheaper than a sloped strip and reads fine.
       deck.quad(
         [ax + halfX, ay, az + halfZ],
         [bx + halfX, by, bz + halfZ],

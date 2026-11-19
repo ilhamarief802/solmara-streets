@@ -1,8 +1,8 @@
 // Every pixel in Solmara is painted at boot on a 2D canvas: asphalt, lane paint,
 // pavements, facades with lit windows, curtain-wall glass, grass, sand, water, concrete,
 // warehouse siding, boardwalk planks and neon signs. Nothing is fetched. Textures are
-// cached by name, wrapped and mip-mapped once, and reuse a single seeded random stream,
-// so the same wall has the same lit windows every run.
+// cached by name, wrapped and mip-mapped once, and reuse a single seeded random stream, so
+// the same wall has the same lit windows every run.
 //
 // Facades come as a pair: `map` is the daylight wall, `lights` is black with only the lit
 // windows, used as an emissive map the world turns up after dusk.

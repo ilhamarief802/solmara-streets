@@ -1,8 +1,8 @@
-// The walkable city. The road graph is for cars; this is the pedestrian layer on top of
-// the same plan: the pavement ring around every block, the crossing links that join two
-// rings at a signalised corner, the kerbside parking spots the car system fills, and the
-// one surface query everything standing on the ground shares ("what is under me, and how
-// high is it"). Pure data and small helpers, no meshes.
+// The walkable city. The road graph is for cars; this is the pedestrian layer on top of the
+// same plan: the pavement ring around every block, the crossing links that join two rings
+// at a signalised corner, the kerbside parking spots the car system fills, and the one
+// surface query everything standing on the ground shares ("what is under me, and how high
+// is it"). Pure data and small helpers, no meshes.
 
 import { Random } from '../core/rng.js';
 import { GRID, WATER, isSandAt, isWaterAt } from './plan.js';
@@ -75,6 +75,7 @@ export function createWalkNetwork(plan, colliders = null) {
 
   /** The junction that touches each ring corner. */
   function cornerNode(block, corner) {
+    // Corner 0 shares the block's own junction; the others step one cell east and/or south.
     const i = block.i + (corner === 1 || corner === 2 ? 1 : 0);
     const j = block.j + (corner === 2 || corner === 3 ? 1 : 0);
     return plan.nodeById.get(`n-${i}-${j}`) ?? null;
@@ -89,9 +90,9 @@ export function createWalkNetwork(plan, colliders = null) {
   ];
 
   /**
-   * Where a pedestrian at a ring corner would step to cross the street straight ahead:
-   * the ring corner of the block across the road, or null when there is no block, no
-   * signal, or the water is in the way.
+   * Where a pedestrian at a ring corner would step to cross the street straight ahead: the
+   * ring corner of the block across the road, or null when there is no block, no signal, or
+   * the water is in the way.
    */
   function crossingFrom(block, corner) {
     const node = cornerNode(block, corner);
@@ -119,6 +120,7 @@ export function createWalkNetwork(plan, colliders = null) {
     if (i >= 0 && j >= 0 && i < GRID.cols - 1 && j < GRID.rows - 1) {
       const block = blockAt(i, j);
       if (block) {
+        // Position inside the cell, measured from the junction at its north-west corner.
         const ux = x - (GRID.originX + i * GRID.cell);
         const uz = z - (GRID.originZ + j * GRID.cell);
         if (ux >= EDGE_IN && ux <= EDGE_OUT && uz >= EDGE_IN && uz <= EDGE_OUT) {
@@ -162,6 +164,7 @@ export function createWalkNetwork(plan, colliders = null) {
   /** True when a junction is close enough to the spot to make parking there a joke. */
   function nearJunction(x, z) {
     const cell = cellAt(x, z);
+    // Only the four junctions of this cell can be within 17 m.
     for (const node of plan.nodes) {
       if (node.i !== cell.i && node.i !== cell.i + 1) continue;
       if (node.j !== cell.j && node.j !== cell.j + 1) continue;
@@ -173,6 +176,7 @@ export function createWalkNetwork(plan, colliders = null) {
   const addSpace = (x, z, heading, type = null) => {
     if (isWaterAt(x, z) || blocked(x, z) || nearJunction(x, z)) return false;
     for (const spot of parking) {
+      // 6.2 m is a car and a half: two spaces closer than that would overlap.
       if (Math.hypot(spot.x - x, spot.z - z) < 6.2) return false;
     }
     parking.push({
@@ -198,8 +202,10 @@ export function createWalkNetwork(plan, colliders = null) {
     const line = PARK_SIDES[side](block);
     const horizontal = side === 'n' || side === 's';
     const length = horizontal ? line.x1 - line.x0 : line.z1 - line.z0;
+    // 8.5 m per space leaves room for a car and its bumpers.
     const spaces = Math.floor(length / 8.5);
     for (let index = 0; index < spaces; index += 1) {
+      // Only some slots fill; an empty kerb reads better than a queue of cars.
       if (!random.chance(0.42)) continue;
       const t = (index + 0.5) / Math.max(1, spaces);
       const x = horizontal ? line.x0 + (line.x1 - line.x0) * t : line.x;

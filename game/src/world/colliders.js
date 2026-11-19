@@ -1,8 +1,8 @@
-// Static collision and ground data for the city. Buildings and walls register an
-// axis-aligned box; the registry buckets them in a coarse grid so a circle test near a
-// tower checks a handful of boxes, not nine hundred. The player, the cars, the bullets
-// and the camera all query it. It also answers "how high is the ground here", which is
-// all the flat city needs until the player can climb.
+// Static collision and ground data for the city. Buildings and walls register an axis-
+// aligned box; the registry buckets them in a coarse grid so a circle test near a tower
+// checks a handful of boxes, not nine hundred. The player, the cars, the bullets and the
+// camera all query it. It also answers "how high is the ground here", which is all the
+// flat city needs until the player can climb.
 
 import { WATER } from './plan.js';
 
@@ -85,7 +85,10 @@ export class ColliderWorld {
   blockedAt(x, z, clearance = 0) {
     for (const box of this.near(x, z, clearance)) {
       const inside =
-        x > box.minX - clearance && x < box.maxX + clearance && z > box.minZ - clearance && z < box.maxZ + clearance;
+        x > box.minX - clearance &&
+        x < box.maxX + clearance &&
+        z > box.minZ - clearance &&
+        z < box.maxZ + clearance;
       if (inside) return box;
     }
     return null;
@@ -112,6 +115,7 @@ export class ColliderWorld {
     for (let pass = 0; pass < iterations; pass += 1) {
       let moved = false;
       for (const box of this.near(px, pz, radius)) {
+        // The nearest point on the box to the circle's centre decides the escape vector.
         const closestX = Math.max(box.minX, Math.min(px, box.maxX));
         const closestZ = Math.max(box.minZ, Math.min(pz, box.maxZ));
         const dx = px - closestX;
@@ -132,6 +136,7 @@ export class ColliderWorld {
           else if (min === toBack) pz = box.minZ - radius;
           else pz = box.maxZ + radius;
         } else {
+          // The 2 mm skin keeps the next pass from re-detecting the same contact.
           const push = radius - distance + 0.002;
           px += (dx / distance) * push;
           pz += (dz / distance) * push;
@@ -156,6 +161,7 @@ export class ColliderWorld {
       if (x < platform.minX || x > platform.maxX || z < platform.minZ || z > platform.maxZ) continue;
       if (platformTop === null || platform.top > platformTop) platformTop = platform.top;
     }
+    // A deck over the sea still stands above the water line.
     if (platformTop !== null && platformTop > height) height = platformTop;
     return height;
   }

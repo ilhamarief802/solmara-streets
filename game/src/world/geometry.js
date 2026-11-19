@@ -4,8 +4,8 @@
 // window row the same size on every building that shares the texture. Vertex colours let
 // one material serve many tinted lots.
 //
-// Materials are MeshLambert: cheap, fog-aware, and with an emissive map for the lit
-// windows the clock turns up after dusk.
+// Materials are MeshLambert: cheap, fog-aware, and with an emissive map for the lit windows
+// the clock turns up after dusk.
 
 /** sRGB hex to a linear vertex-colour triple, optionally scaled. */
 export function colorTriple(hex, tint = 1) {
@@ -37,7 +37,7 @@ function uvPair(value) {
 export class MeshBuilder {
   constructor(name = 'builder') {
     this.name = name;
-    // Plain arrays while the shape is being assembled; build() converts them once.
+    // Plain arrays while the shape is being assembled; finalize() converts them once.
     this.positions = [];
     this.normals = [];
     this.uvs = [];
@@ -62,6 +62,7 @@ export class MeshBuilder {
       this.uvs.push(uvs[i][0], uvs[i][1]);
       this.colors.push(color[0], color[1], color[2]);
     }
+    // Wound counter-clockwise: (0,1,2) and (0,2,3) face along `normal`.
     this.indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
     this.vertices += 4;
     this.triangles += 2;
@@ -96,6 +97,7 @@ export class MeshBuilder {
     const h = height;
     const cos = Math.cos(rotY);
     const sin = Math.sin(rotY);
+    // Local (x, y, z) to world, rotating about the box centre.
     const point = (x, yy, z) => [cx + x * cos - z * sin, y + yy, cz + x * sin + z * cos];
     const ux = 1 / uvX;
     const uy = 1 / uvY;
@@ -128,6 +130,7 @@ export class MeshBuilder {
       [0, 1, 0], topColor,
       scaledUvs([[cx - w, cz + d], [cx + w, cz + d], [cx + w, cz - d], [cx - w, cz - d]], ux, ux),
     );
+    // Most boxes sit on the ground, so the underside is opt-in.
     if (opts.bottom) {
       this.quad(
         point(-w, 0, -d), point(w, 0, -d), point(w, 0, d), point(-w, 0, d),
@@ -221,6 +224,7 @@ export class MeshBuilder {
     const dx = bx - ax;
     const dz = bz - az;
     const length = Math.hypot(dx, dz);
+    // A zero-length span would produce a degenerate box; skip it rather than draw nothing.
     if (length < 0.001) return this;
     return this.box((ax + bx) / 2, bottomY, (az + bz) / 2, width, height, length, color, {
       ...opts,
@@ -315,6 +319,7 @@ export class MeshBuilder {
     this.normals.push(...other.normals);
     this.uvs.push(...other.uvs);
     this.colors.push(...other.colors);
+    // Every index has to shift by the vertices already in this builder.
     for (const index of other.indices) this.indices.push(index + base);
     this.vertices += other.vertices;
     this.triangles += other.triangles;
@@ -365,6 +370,7 @@ export function cityMaterial(texture, options = {}) {
     emissiveIntensity: options.emissiveIntensity ?? 0,
     fog: options.fog ?? true,
   });
+  // UVs are already in world metres; the texture tiles once per metre scale.
   if (material.map) material.map.repeat.set(1, 1);
   return material;
 }

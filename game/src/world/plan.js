@@ -1,7 +1,7 @@
-// The city plan: block grid, road graph, coastline, channel, bridges, the elevated
-// highway ring, district zoning and the queries later systems need (nearest lane,
-// nearest node, water/land tests). Pure data plus small helpers, no meshes: every
-// visual is built from this plan by the world modules.
+// The city plan: block grid, road graph, coastline, channel, bridges, the elevated highway
+// ring, district zoning and the queries later systems need (nearest lane, nearest node,
+// water/land tests). Pure data plus small helpers, no meshes: every visual is built from
+// this plan by the world modules.
 
 import { Random } from '../core/rng.js';
 import { districtIdAt, DISTRICT_IDS, DISTRICTS } from './districts.js';
@@ -124,8 +124,8 @@ function landNodes() {
       const x = GRID.originX + i * GRID.cell;
       const z = GRID.originZ + j * GRID.cell;
       if (isWaterAt(x, z)) continue;
-      // The far south-east is beach and the far north-west is marsh: the grid still
-      // runs there, the districts simply raise nothing tall on it.
+      // The far south-east is beach and the far north-west is marsh: the grid still runs
+      // there, the districts simply raise nothing tall on it.
       nodes.push({
         id: nodeId(i, j),
         i,
@@ -147,6 +147,7 @@ function laneFor(from, to, side, speed) {
   const dx = to.x - from.x;
   const dz = to.z - from.z;
   const length = Math.hypot(dx, dz);
+  // The drive side is the left/right normal of the centreline.
   const nx = -dz / length;
   const nz = dx / length;
   const offset = (GRID.laneWidth / 2) * side;
@@ -184,6 +185,7 @@ function makeEdge(id, a, b, axis, options = {}) {
     bridge: Boolean(options.bridge),
     highway: Boolean(options.highway),
     width: options.width ?? GRID.roadWidth,
+    // Both directions, each on its own side of the centreline.
     lanes: [laneFor(a, b, 1, speed), laneFor(b, a, -1, speed)],
   };
 }
@@ -221,6 +223,7 @@ function buildGraph(nodes) {
     }
   };
 
+  // Horizontal edges first, then vertical: the bridge check only applies to 'h'.
   for (let j = 0; j < GRID.rows; j += 1) {
     for (let i = 0; i < GRID.cols - 1; i += 1) {
       tryEdge(byIndex.get(indexKey(i, j)), byIndex.get(indexKey(i + 1, j)), 'h');
@@ -242,6 +245,7 @@ function buildBlocks(nodes) {
     for (let i = 0; i < GRID.cols - 1; i += 1) {
       const a = byIndex.get(indexKey(i, j));
       const b = byIndex.get(indexKey(i + 1, j + 1));
+      // A block needs all four corners on land, so a missing corner means a water cell.
       if (!a || !b) continue;
       const x0 = a.x + GRID.kerbInset;
       const z0 = a.z + GRID.kerbInset;
@@ -286,6 +290,7 @@ function buildHighway() {
   const segments = [];
   for (let i = 0; i < points.length; i += 1) {
     const a = points[i];
+    // The ring is closed: the last point connects back to the first.
     const b = points[(i + 1) % points.length];
     const dx = b.x - a.x;
     const dz = b.z - a.z;
@@ -383,9 +388,9 @@ function pickLandmarkBlocks(plan) {
 }
 
 /**
- * Creates the whole plan. Deterministic for a given seed; the default seed is the
- * city's fixed one, and shots may pass another only to vary their camera, never the
- * layout they inspect.
+ * Creates the whole plan. Deterministic for a given seed; the default seed is the city's
+ * fixed one, and shots may pass another only to vary their camera, never the layout they
+ * inspect.
  */
 export function createCityPlan(seed = 'solmara-01') {
   const random = new Random(`${seed}:plan`);
@@ -394,6 +399,7 @@ export function createCityPlan(seed = 'solmara-01') {
   const blocks = buildBlocks(nodes);
   const highway = buildHighway();
 
+  // Flatten the directed lanes into one list for traffic and navigation queries.
   const lanes = [];
   for (const edge of edges) {
     edge.lanes.forEach((lane, index) => {
@@ -456,6 +462,7 @@ export function nearestLanePoint(plan, x, z, maxDistance = Infinity) {
     const dx = to.x - from.x;
     const dz = to.z - from.z;
     const lengthSq = dx * dx + dz * dz || 1;
+    // Project the query onto the segment and clamp to its ends.
     const t = Math.max(0, Math.min(1, ((x - from.x) * dx + (z - from.z) * dz) / lengthSq));
     const px = from.x + dx * t;
     const pz = from.z + dz * t;
