@@ -1,12 +1,11 @@
-// Sound, all of it synthesised at run time: there is not one audio file in the entry.
-// The engine is two detuned oscillators through a low-pass; the siren is a pair of
-// alternating tones that get faster and louder with the wanted level; the tyre squeal,
-// gunshots, impacts and footsteps are short bursts of filtered noise; and the music is a
-// slow chord pad plus a bass line generated from a small district mood table, changing
-// with the time of day.
+// Sound, all of it synthesised at run time: there is not one audio file in the entry. The
+// engine is two detuned oscillators through a low-pass; the siren is a pair of alternating
+// tones that get faster and louder with the wanted level; the tyre squeal, gunshots, impacts
+// and footsteps are short bursts of filtered noise; and the music is a slow chord pad plus a
+// bass line generated from a small district mood table, changing with the time of day.
 //
-// Browsers refuse to start an AudioContext before a gesture, so nothing is created until
-// the first pointer or key event. Until then, every call is a cheap no-op.
+// Browsers refuse to start an AudioContext before a gesture, so nothing is created until the
+// first pointer or key event. Until then, every call is a cheap no-op.
 
 const MOODS = {
   downtown: { root: 50, chord: [0, 4, 7, 11], bass: [0, 0, 3, 5], tempo: 78, wave: 'sawtooth' },
@@ -30,6 +29,7 @@ function midiToHz(note) {
 /** A short, click-free envelope on a gain node. */
 function envelope(ctx, gain, peak, attack, decay, at) {
   gain.gain.setValueAtTime(SILENT, at);
+  // Exponential ramps cannot reach zero, hence the 0.0002 floor on the peak.
   gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), at + attack);
   gain.gain.exponentialRampToValueAtTime(SILENT, at + attack + decay);
 }
@@ -63,6 +63,7 @@ export class GameAudio {
   /** Called on the first pointer/key gesture. Creates and resumes the context. */
   unlock() {
     if (this.started) {
+      // A second gesture only needs to wake a context the browser suspended.
       this.resume();
       return;
     }
@@ -73,6 +74,7 @@ export class GameAudio {
       this.ctx = new Ctor();
       const ctx = this.ctx;
 
+      // Three buses: everything goes through master; music and effects have their own gain.
       this.master = ctx.createGain();
       this.master.gain.value = this.muted ? 0 : MASTER_LEVEL;
       this.master.connect(ctx.destination);
@@ -109,6 +111,7 @@ export class GameAudio {
     const data = buffer.getChannelData(0);
     let last = 0;
     for (let i = 0; i < data.length; i += 1) {
+      // A leaky integrator over white noise is brown noise: a gentle random walk.
       last = (last + 0.02 * (Math.random() * 2 - 1)) / 1.02;
       data[i] = last * 3.2;
     }
@@ -125,8 +128,8 @@ export class GameAudio {
     filter.frequency.value = 520;
     filter.Q.value = 4;
 
-    // A low sawtooth with a square an octave-and-a-half above it: the rough edge of an
-    // old four-cylinder.
+    // A low sawtooth with a square an octave-and-a-half above it: the rough edge of an old
+    // four-cylinder.
     const a = ctx.createOscillator();
     a.type = 'sawtooth';
     a.frequency.value = 55;
@@ -151,6 +154,7 @@ export class GameAudio {
     const out = ctx.createGain();
     out.gain.value = SILENT;
 
+    // Two tones a fifth apart; updateSiren flips them to make the wail.
     const a = ctx.createOscillator();
     a.type = 'triangle';
     a.frequency.value = 640;
@@ -175,6 +179,7 @@ export class GameAudio {
     src.buffer = this.noise;
     src.loop = true;
 
+    // A narrow band around 1.75 kHz is the squeal; the gain rides tyreGain.
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
     band.frequency.value = 1750;
@@ -194,6 +199,7 @@ export class GameAudio {
     if (!this.master) return;
     const now = this.ctx.currentTime;
     this.master.gain.cancelScheduledValues(now);
+    // A short target ramp avoids the click a direct value write would make.
     this.master.gain.setTargetAtTime(this.muted ? 0 : MASTER_LEVEL, now, 0.03);
   }
 
@@ -232,6 +238,7 @@ export class GameAudio {
     }
 
     src.start(at);
+    // Stop a hair after the envelope ends, so the tail is never cut mid-slope.
     src.stop(at + attack + decay + 0.05);
   }
 
@@ -244,6 +251,7 @@ export class GameAudio {
     const osc = ctx.createOscillator();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, at);
+    // An exponential glide is what gives a shot its downward "crack".
     if (endFreq) osc.frequency.exponentialRampToValueAtTime(Math.max(30, endFreq), at + attack + decay);
 
     const gain = ctx.createGain();
@@ -260,6 +268,7 @@ export class GameAudio {
 
   gunshot(kind = 'pistol') {
     const shotgun = kind === 'shotgun';
+    // The shotgun is lower, louder and longer: the body of the sound, not just the crack.
     this.burst({ freq: shotgun ? 420 : 900, q: 0.7, peak: shotgun ? 0.55 : 0.36, decay: shotgun ? 0.26 : 0.15 });
     this.tone({ freq: shotgun ? 92 : 150, endFreq: 40, peak: 0.3, decay: 0.18, type: 'sine' });
   }
@@ -285,6 +294,8 @@ export class GameAudio {
   }
 
   squeal(amount = 1) {
+    // Queued, not played: update() feeds it to the looping tyre voice, which decays on its
+    // own, so a fast series of slips reads as one long squeal.
     this.tyreGain = Math.min(1, this.tyreGain + amount * 0.5);
   }
 
@@ -322,6 +333,7 @@ export class GameAudio {
 
     if (!this.tyre) return;
     this.tyre.out.gain.setTargetAtTime(SILENT + this.tyreGain * 0.09, now, 0.04);
+    // A little wobble in the band keeps the squeal from sounding like a test tone.
     this.tyre.band.frequency.setTargetAtTime(1500 + Math.sin(now * 9) * 220, now, 0.05);
   }
 
@@ -345,9 +357,12 @@ export class GameAudio {
     const beatSeconds = 60 / mood.tempo;
     this.musicClock += dt;
 
+    // Schedule every beat that has elapsed, so a long frame cannot skip the loop.
     while (this.musicClock >= beatSeconds) {
       this.musicClock -= beatSeconds;
+      // A quarter-beat of lead time gives the scheduler room to place the note.
       const at = ctx.currentTime + 0.04;
+      // Everything drops a whole tone after dark.
       const shift = this.night ? -2 : 0;
 
       const bassNote = mood.root - 12 + mood.bass[this.beat % mood.bass.length] + shift;
@@ -355,12 +370,20 @@ export class GameAudio {
 
       const onBar = this.beat % 4 === 0;
       if (onBar) {
+        // The pad: the whole chord, held for three and a half beats.
         for (const interval of mood.chord) {
-          this.musicTone({ freq: midiToHz(mood.root + interval + shift), at, duration: beatSeconds * 3.6, peak: 0.035, type: mood.wave });
+          this.musicTone({
+            freq: midiToHz(mood.root + interval + shift),
+            at,
+            duration: beatSeconds * 3.6,
+            peak: 0.035,
+            type: mood.wave,
+          });
         }
       }
 
       if (onBar && this.beat % 8 === 0) {
+        // An occasional bell an octave above the chord, walking through its notes.
         this.musicTone({
           freq: midiToHz(mood.root + 12 + mood.chord[this.chordStep % mood.chord.length]),
           at,
@@ -411,9 +434,20 @@ export class GameAudio {
     on('police:ram', () => this.impact(1.1));
     on('vehicle:tyre', ({ slip } = {}) => this.squeal(Math.min(1, (slip ?? 3) / 9)));
     on('player:footstep', ({ sprinting } = {}) => this.footstep(Boolean(sprinting)));
-    on('mission:complete', () => this.musicTone({ freq: midiToHz(76), at: this.ctx?.currentTime ?? 0, duration: 0.6, peak: 0.08, type: 'sine' }));
+    // A reward chime; it only makes a sound once the context exists.
+    on('mission:complete', () =>
+      this.musicTone({
+        freq: midiToHz(76),
+        at: this.ctx?.currentTime ?? 0,
+        duration: 0.6,
+        peak: 0.08,
+        type: 'sine',
+      }),
+    );
     on('player:down', () => this.tone({ freq: 180, endFreq: 44, peak: 0.2, decay: 0.9, type: 'sawtooth' }));
-    on('wanted:change', ({ wanted } = {}) => this.tone({ freq: wanted > 0 ? 520 : 380, peak: 0.05, decay: 0.1, type: 'square' }));
+    on('wanted:change', ({ wanted } = {}) =>
+      this.tone({ freq: wanted > 0 ? 520 : 380, peak: 0.05, decay: 0.1, type: 'square' }),
+    );
   }
 
   dispose() {

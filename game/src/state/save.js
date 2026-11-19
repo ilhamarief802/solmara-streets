@@ -1,11 +1,11 @@
 // The entry's save file. One record in localStorage holds everything a player expects to
-// find again after closing the tab: the wallet, the missions already finished, the
-// settings they chose and the place they were standing. The missions module keeps its own
-// older record so a save written before this module existed still loads; both keys are
-// read here, and the new record is the one written from now on.
+// find again after closing the tab: the wallet, the missions already finished, the settings
+// they chose and the place they were standing. The missions module keeps its own older
+// record so a save written before this module existed still loads; both keys are read here,
+// and the new record is the one written from now on.
 //
-// Nothing in here touches the DOM or the WebGL context, so a test can call it directly
-// with a stub storage.
+// Nothing in here touches the DOM or the WebGL context, so a test can call it directly with
+// a stub storage.
 
 const SAVE_KEY = 'solmara.save.v2';
 const LEGACY_KEY = 'solmara.save.v1';
@@ -27,6 +27,7 @@ function readJson(key) {
     const raw = store.getItem(key);
     if (!raw) return null;
     const value = JSON.parse(raw);
+    // Anything that is not an object (a number, a bare string) is not a save.
     return value && typeof value === 'object' ? value : null;
   } catch {
     return null;
@@ -64,12 +65,14 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 /** Coerces whatever was on disk into the shape above. */
 function normalise(payload) {
   const save = { ...emptySave(), ...(payload ?? {}) };
+  save.version = CURRENT_VERSION;
   save.money = Math.max(0, Math.round(Number(save.money) || 0));
   save.completed = Array.isArray(save.completed) ? save.completed.filter((id) => typeof id === 'string') : [];
   // `|| 100` keeps a corrupt or zero health from restoring a dead player.
   save.health = clamp(Number(save.health) || 100, 0, 100);
   save.armour = clamp(Number(save.armour) || 0, 0, 100);
   if (save.settings && typeof save.settings !== 'object') save.settings = null;
+  // A position without a usable x is worthless; drop the whole record.
   if (save.position && !Number.isFinite(Number(save.position.x))) save.position = null;
   return save;
 }
@@ -97,9 +100,9 @@ export function hasSave() {
 }
 
 /**
- * Merges a partial snapshot into the record and writes it. A field left out keeps the
- * value already on disk, so the menu can save settings without clobbering the wallet and
- * the mission system can save the wallet without clobbering the position.
+ * Merges a partial snapshot into the record and writes it. A field left out keeps the value
+ * already on disk, so the menu can save settings without clobbering the wallet and the
+ * mission system can save the wallet without clobbering the position.
  */
 export function writeSave(partial = {}) {
   const current = loadSave() ?? emptySave();
@@ -120,8 +123,8 @@ export function clearSave() {
 }
 
 /**
- * Builds the snapshot main.js hands to writeSave every few seconds and whenever the
- * player pauses. Kept a plain function so the game object stays inspectable.
+ * Builds the snapshot main.js hands to writeSave every few seconds and whenever the player
+ * pauses. Kept a plain function so the game object stays inspectable.
  */
 export function snapshotGame(game) {
   const player = game.player;
@@ -136,6 +139,7 @@ export function snapshotGame(game) {
       x: Number(player?.position.x ?? 0),
       z: Number(player?.position.z ?? 0),
       heading: Number(player?.heading ?? 0),
+      // A car is only recorded when the player is sitting in one.
       car: car ? { type: car.type, paint: car.paint, x: car.x, z: car.z, heading: car.heading } : null,
     },
   };
@@ -175,6 +179,7 @@ export function restoreGame(save, game) {
     missions.completed = [...(save.completed ?? [])];
   }
   if (combat) {
+    // A restored player is always on their feet, with at least one point of health.
     combat.health = Math.max(1, Math.min(100, save.health ?? 100));
     combat.armour = Math.max(0, Math.min(100, save.armour ?? 0));
     combat.downKind = null;

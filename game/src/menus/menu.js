@@ -1,13 +1,21 @@
 // The front end: a start screen over the paused city, an Escape pause menu, the settings
 // panel every other screen shares, and the two story cards (wasted/busted, mission
-// complete). It is plain DOM above the canvas, so it works before pointer lock, without
-// the WebGL context and with a mouse or the arrow keys: every button is reachable by Tab,
-// Enter, and Escape returns one screen, never to a dead end.
+// complete). It is plain DOM above the canvas, so it works before pointer lock, without the
+// WebGL context and with a mouse or the arrow keys: every button is reachable by Tab, Enter,
+// and Escape returns one screen, never to a dead end.
 //
 // The menu never simulates the game. It pauses the loop, lets the last frame stay on the
 // canvas behind a scrim, and resumes when the player chooses. The shot rig hides it.
 
-import { hasSave, loadSave, writeSave, snapshotGame, restoreGame, clearSave, settingsSnapshot } from '../state/save.js';
+import {
+  hasSave,
+  loadSave,
+  writeSave,
+  snapshotGame,
+  restoreGame,
+  clearSave,
+  settingsSnapshot,
+} from '../state/save.js';
 
 const SCREENS = ['start', 'pause', 'settings', 'credits', 'end', 'complete'];
 /** How long the mission-complete card stays up before it closes itself. */
@@ -70,6 +78,7 @@ export class MenuUI {
       node.className = `menu-button ${kind}`.trim();
       node.textContent = label;
       node.addEventListener('click', () => {
+        // Every click plays the UI tick, whether or not it changes screen.
         this.click();
         action();
       });
@@ -99,13 +108,9 @@ export class MenuUI {
     this.continueButton = button(startButtons, 'Continue', () => this.continueGame());
     button(startButtons, 'Settings', () => this.openSettings('start'));
     button(startButtons, 'Credits', () => this.show('credits'));
+    // Continue is only live when there is a record to restore.
     this.continueButton.disabled = !hasSave();
-    text(
-      'p',
-      'menu-keyline',
-      startCard,
-      'WASD walk · Shift sprint · E talk · F steal · LMB fight · V camera · Esc pause',
-    );
+    text('p', 'menu-keyline', startCard, 'WASD walk · Shift sprint · E talk · F steal · LMB fight · V camera · Esc pause');
 
     // ------------------------------------------------------------ pause
     const pauseCard = card(screen('pause'), 'menu-card-pause');
@@ -123,6 +128,7 @@ export class MenuUI {
     const grid = document.createElement('div');
     grid.className = 'menu-settings';
     settingsCard.append(grid);
+    // One record per control, so fillSettings can write the current values back into them.
     this.rows = {};
 
     const row = (label, hint = null) => {
@@ -153,6 +159,7 @@ export class MenuUI {
       input.step = String(step);
       input.className = 'menu-slider';
       input.dataset.setting = key;
+      // Dragging applies live; letting go writes the save.
       input.addEventListener('input', () => {
         output.textContent = format(Number(input.value));
         this.applyLive(key, Number(input.value));
@@ -214,12 +221,7 @@ export class MenuUI {
     settingsButtons.className = 'menu-buttons menu-buttons-row';
     settingsCard.append(settingsButtons);
     button(settingsButtons, 'Back', () => this.closeSettings(), 'is-quiet');
-    text(
-      'p',
-      'menu-keyline',
-      settingsCard,
-      'Changes apply at once; Back keeps them and writes the save.',
-    );
+    text('p', 'menu-keyline', settingsCard, 'Changes apply at once; Back keeps them and writes the save.');
 
     // ------------------------------------------------------------ credits
     const creditsCard = card(screen('credits'), 'menu-card-start');
@@ -275,6 +277,7 @@ export class MenuUI {
         event.preventDefault();
         this.resume();
       }
+      // Arrow keys walk the visible buttons, top to bottom.
       if (this.screen && (event.code === 'ArrowDown' || event.code === 'ArrowUp')) {
         event.preventDefault();
         this.moveFocus(event.code === 'ArrowDown' ? 1 : -1);
@@ -307,15 +310,18 @@ export class MenuUI {
         this.hideComplete();
         return;
       default:
+        // Escape in the street opens the pause menu.
         this.pause();
     }
   }
 
   moveFocus(direction) {
+    // Only the buttons on the screen actually showing are focusable.
     const buttons = [...this.root.querySelectorAll('button:not([disabled])')].filter((node) => node.offsetParent !== null);
     if (!buttons.length) return;
     const index = buttons.indexOf(document.activeElement);
-    const next = index === -1 ? (direction > 0 ? 0 : buttons.length - 1) : (index + direction + buttons.length) % buttons.length;
+    const next =
+      index === -1 ? (direction > 0 ? 0 : buttons.length - 1) : (index + direction + buttons.length) % buttons.length;
     buttons[next].focus();
   }
 
@@ -325,6 +331,7 @@ export class MenuUI {
     bus.on('player:down', ({ kind }) => this.showEnd(kind));
     bus.on('player:respawn', () => this.hideEnd());
     bus.on('mission:complete', (payload) => this.showComplete(payload));
+    // The settings screen can ask for the readout before the menu is ever opened.
     if (this.settings.showFps) this.perf?.toggle(true);
   }
 
@@ -342,9 +349,11 @@ export class MenuUI {
     this.root.classList.toggle('is-start', name === 'start');
     const first = this.screens[name].querySelector('button:not([disabled])');
     // Focus only if this screen is still the one on show when the timer fires.
-    if (first) setTimeout(() => {
-      if (this.screen === name) first.focus({ preventScroll: true });
-    }, 30);
+    if (first) {
+      setTimeout(() => {
+        if (this.screen === name) first.focus({ preventScroll: true });
+      }, 30);
+    }
   }
 
   hide() {
@@ -358,6 +367,7 @@ export class MenuUI {
   boot() {
     this.game.loop.setPaused(true);
     this.game.input.enabled = false;
+    // A save may have appeared since the menu was built.
     this.continueButton.disabled = !hasSave();
     this.show('start');
   }
@@ -377,6 +387,7 @@ export class MenuUI {
       game.combat.downKind = null;
     }
 
+    // The same pavement the boot spawn uses, so Play and the first frame agree.
     const spawn = game.world.spawnById('downtown-boulevard') ?? { x: 340, z: 80, heading: 0 };
     game.player.teleport(spawn.x - 10.8, spawn.z - 20, 0);
     game.player.character?.rest();
@@ -394,6 +405,7 @@ export class MenuUI {
   continueGame() {
     const save = loadSave();
     if (!save) {
+      // Nothing to continue: treat it as Play rather than doing nothing.
       this.startNew();
       return;
     }
@@ -403,6 +415,7 @@ export class MenuUI {
   }
 
   pause() {
+    // A downed player gets the wasted card, not the pause menu.
     if (this.screen || this.game.combat?.isDown) return;
     this.game.loop.setPaused(true);
     this.game.input.enabled = false;
@@ -424,6 +437,7 @@ export class MenuUI {
     this.game.loop.setPaused(true);
     this.game.input.enabled = false;
     this.game.input.releaseLock?.();
+    // The save has just been written, so Continue is now live.
     this.continueButton.disabled = !hasSave();
     this.show('start');
   }
@@ -463,6 +477,7 @@ export class MenuUI {
   }
 
   continueAfterDown() {
+    // The respawn puts the body back on a pavement; the card is already answering it.
     this.game.combat?.respawn?.();
     this.hideEnd();
     this.game.input.requestLock?.();
@@ -482,6 +497,7 @@ export class MenuUI {
   hideComplete() {
     if (this.screen !== 'complete') return;
     this.hide();
+    // Only take the pointer back if the game is not paused behind the card.
     if (!this.game.loop.paused) {
       this.game.input.enabled = true;
       this.game.input.requestLock?.();
@@ -498,6 +514,7 @@ export class MenuUI {
       else row.input.value = String(value);
       if (row.value) row.value.textContent = row.format(Number(value));
     };
+
     put('drawDistance', settings.drawDistance);
     put('traffic', settings.trafficCount);
     put('pedestrians', settings.pedestrianCount);
@@ -543,6 +560,7 @@ export class MenuUI {
         game.renderer.shadowMap.enabled = settings.shadows;
         game.renderer.shadowMap.needsUpdate = true;
         game.world?.setShadows?.(settings.shadows);
+        // Redraw the segmented control so the choice shows.
         this.fillSettings();
         break;
       case 'post':
