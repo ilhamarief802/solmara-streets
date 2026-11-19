@@ -89,6 +89,7 @@ export class CombatEffects {
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
+      // One unit cube, stretched along its local Z by tracer().
       const mesh = new THREE.Mesh(this.boxGeometry, material);
       mesh.visible = false;
       mesh.frustumCulled = false;
@@ -148,6 +149,7 @@ export class CombatEffects {
     slot.mesh.visible = true;
     slot.material.color.setHex(color);
     slot.material.opacity = 1;
+    // A random size each time keeps a burst of shots from looking stamped.
     slot.mesh.scale.setScalar(scale * (0.7 + Math.random() * 0.6));
     this.active += 1;
     return slot;
@@ -160,6 +162,7 @@ export class CombatEffects {
     _target.set(to.x, to.y, to.z);
     _dir.subVectors(_target, _origin);
     const length = _dir.length() || 0.01;
+    // The cube is stretched along Z and aimed from its midpoint at the target.
     slot.mesh.position.copy(_origin).addScaledVector(_dir, 0.5);
     slot.mesh.lookAt(_target);
     slot.mesh.scale.set(width, width, length);
@@ -212,6 +215,7 @@ export class CombatEffects {
       if (flash.life <= 0) continue;
       flash.life -= dt;
       flash.material.opacity = Math.max(0, flash.life / flash.maxLife);
+      // A flash always faces the camera; the quad has no other orientation.
       if (this.camera) flash.mesh.quaternion.copy(this.camera.quaternion);
       if (flash.life <= 0) flash.mesh.visible = false;
     }

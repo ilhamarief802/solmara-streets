@@ -11,6 +11,7 @@ export const WEAPONS = {
     melee: true,
     damage: 24,
     range: 2.4,
+    // The melee cone, in radians either side of the facing.
     arc: 0.7,
     rate: 0.38,
     clip: Infinity,

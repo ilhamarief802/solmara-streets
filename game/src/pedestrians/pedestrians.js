@@ -4,7 +4,8 @@
 // sends them running, but even then they look for pavement to run on.
 //
 // All of them are drawn from seven InstancedMeshes (torso, head, hat, two legs, two arms),
-// so three dozen people cost seven draw calls.
+// so three dozen people cost seven draw calls. The hat mesh is packed separately: only the
+// peds wearing a hat take an instance in it.
 
 import { Random } from '../core/rng.js';
 import { clamp, dampAngle } from '../core/math.js';
@@ -51,6 +52,7 @@ export class PedestrianSystem {
     this.seed = seed;
     this.random = new Random(`${seed}:peds`);
     this.peds = [];
+    // Only blocks on dry land can hold a pavement ring.
     this.blocks = world.plan.blocks.filter((block) => !isWaterAt(block.cx, block.cz));
     this.focus = { x: player?.position.x ?? 0, z: player?.position.z ?? 0 };
     this.respawnClock = 0;
@@ -64,6 +66,7 @@ export class PedestrianSystem {
       leg: hangingBox(0.16, 0.82, 0.19),
       arm: hangingBox(0.13, 0.56, 0.15),
     };
+    // One white material each: the instance colour is what paints the crowd.
     const material = () => new THREE.MeshLambertMaterial({ color: 0xffffff });
     this.meshes = {
       torso: this.makeMesh(this.geometry.torso, material(), 'peds-torso'),
@@ -163,6 +166,7 @@ export class PedestrianSystem {
     }
     const start = corners[corner];
     const nextIndex = (corner + 1) % 4;
+    // The hat decision is one draw whether or not a hat is worn, so the stream stays fixed.
     const hatRoll = this.random.float();
 
     return {
@@ -189,13 +193,14 @@ export class PedestrianSystem {
       fleeTimer: 0,
       fleeCooldown: 0,
       threat: { x: 0, z: 0 },
+      // How many ring legs the ped has walked since its last crossing.
       settled: 2,
     };
   }
 
   /**
-   * Adds peds on the pavements around a point, walking those blocks' rings. The street
-   * shot uses this to guarantee a living crowd in the frame.
+   * Adds peds on the pavements around a point, walking those blocks' rings. The street shot
+   * uses this to guarantee a living crowd in the frame.
    */
   placeAround(x, z, count = 6, radius = 50) {
     const walk = this.world.walk;
@@ -270,6 +275,7 @@ export class PedestrianSystem {
   decideNext(ped) {
     const walk = this.world.walk;
     const crossing = walk.crossingFrom(ped.block, ped.corner);
+    // Crossing is tempting only at a signal, and only now and then.
     if (crossing && ped.settled > 0 && this.random.chance(0.36)) {
       ped.mode = 'crossing';
       ped.nextBlock = crossing.block;
@@ -316,6 +322,7 @@ export class PedestrianSystem {
       // A ped already in the crossing may keep running along it.
       if (ped.mode === 'crossing' && surface.kind === 'road') return { x: nx, z: nz };
     }
+    // Nowhere safe to run: stand still rather than step into the road.
     return null;
   }
 
@@ -381,6 +388,7 @@ export class PedestrianSystem {
     const nearest = this.world.walk.nearestCorner(block, ped.x, ped.z);
     ped.block = block;
     ped.corner = nearest.corner;
+    // Snap to the corner: the ring is the only place a pedestrian is allowed to stand.
     ped.x = corners[nearest.corner].x;
     ped.z = corners[nearest.corner].z;
     const next = (nearest.corner + 1) % 4;
@@ -407,6 +415,7 @@ export class PedestrianSystem {
       return;
     }
 
+    // The run is over: rejoin the ring before walking on.
     if (ped.mode === 'flee') this.settle(ped);
 
     const dx = ped.target.x - ped.x;
@@ -415,6 +424,7 @@ export class PedestrianSystem {
     const speed = ped.mode === 'crossing' ? CROSS_SPEED : ped.speed;
 
     if (distance < 0.16) {
+      // Arrived at the target corner: pick up the next leg.
       ped.x = ped.target.x;
       ped.z = ped.target.z;
       if (ped.mode === 'crossing') {
@@ -509,6 +519,7 @@ export class PedestrianSystem {
         lay(meshes.torso, 0, 0, ped.jacket);
         lay(meshes.head, 0, 0.5, ped.skin);
         if (ped.hat) {
+          // The hat mesh is compacted, so its instance index is the hat count, not the ped.
           lay(meshes.hat, 0, 0.62, ped.hat, hats);
           hats += 1;
         }
@@ -521,9 +532,11 @@ export class PedestrianSystem {
 
       // A walking body: hips at 0.84 of the ped's height, limbs swinging about the joint.
       const moving = clamp(ped.speed / 2.2, 0, 1);
-      const swing = Math.sin(ped.phase) * (0.3 + clamp(ped.speed / 5, 0, 1) * 0.52) * (ped.speed > 0.1 ? 1 : 0);
+      const swing =
+        Math.sin(ped.phase) * (0.3 + clamp(ped.speed / 5, 0, 1) * 0.52) * (ped.speed > 0.1 ? 1 : 0);
       const hip = 0.84 * height;
 
+      // A standing ped sways slightly; a walking one is driven by the stride.
       place(meshes.torso, hip, 0, 0, 0, sway * (1 - moving), ped.jacket);
       place(meshes.head, hip, 0, 0.56, 0.01, 0, ped.skin);
       if (ped.hat) {
@@ -541,6 +554,7 @@ export class PedestrianSystem {
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
+    // The hat mesh carries only the hat-wearing peds.
     meshes.hat.count = hats;
     meshes.hat.instanceMatrix.needsUpdate = true;
     if (meshes.hat.instanceColor) meshes.hat.instanceColor.needsUpdate = true;
@@ -550,6 +564,7 @@ export class PedestrianSystem {
     const focus = this.focus;
     for (let index = this.peds.length - 1; index >= 0; index -= 1) {
       const ped = this.peds[index];
+      // A dead body is only cleared once its timer has run out, wherever it fell.
       const gone = Boolean(ped.dead) && (ped.deadTimer ?? 0) <= 0;
       if (!gone && Math.hypot(ped.x - focus.x, ped.z - focus.z) <= DESPAWN) continue;
       const replacement = this.makePed();
