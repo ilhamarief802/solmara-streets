@@ -43,7 +43,7 @@ const SKY_FRAGMENT = /* glsl */ `
 `;
 
 /**
- * Builds the sky, lights and stars and returns a small controller the main loop drives.
+ * Builds the sky, lights and stars, and returns a small controller the main loop drives.
  * `setPalette` takes the clock palette plus the weather's multipliers.
  */
 export function createAtmosphere(scene, { radius = 2600, starCount = 900, segments = 24 } = {}) {
@@ -68,13 +68,16 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
     depthWrite: false,
     fog: false,
   });
-  const dome = new THREE.Mesh(new THREE.SphereGeometry(radius, segments, Math.max(10, Math.round(segments * 0.55))), domeMaterial);
+  // Fewer rings than segments: the dome only has to carry a vertical gradient.
+  const rings = Math.max(10, Math.round(segments * 0.55));
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(radius, segments, rings), domeMaterial);
   dome.name = 'sky-dome';
   dome.frustumCulled = false;
   dome.renderOrder = -100;
   group.add(dome);
 
-  // Stars: a sparse upper hemisphere, fixed relative to the dome.
+  // Stars: a sparse upper hemisphere. They hang off their own group so drifting them is
+  // one rotation instead of rewriting the buffer.
   const random = new Random('solmara-stars');
   const starPositions = new Float32Array(starCount * 3);
   const starSizes = new Float32Array(starCount);
@@ -82,9 +85,10 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
     const azimuth = random.range(0, Math.PI * 2);
     const elevation = Math.asin(random.range(0.06, 0.98));
     const r = radius * 0.94;
-    starPositions[i * 3] = Math.cos(azimuth) * Math.cos(elevation) * r;
+    const cosElevation = Math.cos(elevation);
+    starPositions[i * 3] = Math.cos(azimuth) * cosElevation * r;
     starPositions[i * 3 + 1] = Math.sin(elevation) * r;
-    starPositions[i * 3 + 2] = Math.sin(azimuth) * Math.cos(elevation) * r;
+    starPositions[i * 3 + 2] = Math.sin(azimuth) * cosElevation * r;
     starSizes[i] = random.range(0.7, 2.1);
   }
   const starGeometry = new THREE.BufferGeometry();
@@ -104,33 +108,28 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
   stars.name = 'stars';
   stars.frustumCulled = false;
   stars.renderOrder = -90;
-  group.add(stars);
+  const starSpin = new THREE.Group();
+  starSpin.add(stars);
+  group.add(starSpin);
 
   // Lights: a warm sun, a cool moon, and a two-colour hemisphere fill.
   const sun = new THREE.DirectionalLight(0xffe7c2, 2.2);
   sun.name = 'sun';
   sun.position.set(420, 500, 260);
   sun.castShadow = false;
-  group.add(sun);
-  group.add(sun.target);
+  group.add(sun, sun.target);
 
   const moon = new THREE.DirectionalLight(0x9fb6e8, 0);
   moon.name = 'moon';
   moon.position.set(-420, 480, -260);
   moon.castShadow = false;
-  group.add(moon);
-  group.add(moon.target);
+  group.add(moon, moon.target);
 
   const hemi = new THREE.HemisphereLight(0xb4cce4, 0x6b6350, 0.9);
   hemi.name = 'ambient';
   group.add(hemi);
 
   scene.add(group);
-
-  const state = { group, dome, stars, sun, moon, hemi, uniforms };
-  const starSpin = new THREE.Group();
-  starSpin.add(stars);
-  group.add(starSpin);
 
   /**
    * Applies a clock palette. `weather` is optional; its multipliers soften the sun and
@@ -139,6 +138,7 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
   function setPalette(palette, weather = null) {
     const sunScale = weather ? weather.sunMultiplier : 1;
     const haze = weather ? weather.haze : 0.15;
+
     uniforms.uTop.value.setRGB(...palette.skyTop);
     uniforms.uHorizon.value.setRGB(...palette.skyHorizon);
     uniforms.uSunColor.value.setRGB(...palette.sunColor);
@@ -157,6 +157,7 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
     hemi.groundColor.setRGB(...palette.ambientGround);
     hemi.intensity = palette.ambientIntensity * (0.85 + haze * 0.2);
 
+    // Cloud cover is what hides the stars, not the hour alone.
     starMaterial.opacity = palette.starAlpha * (1 - (weather?.cloud ?? 0) * 0.7);
     stars.visible = starMaterial.opacity > 0.01;
   }
@@ -167,5 +168,5 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
     starSpin.rotation.y += dt * 0.0035;
   }
 
-  return { ...state, setPalette, update };
+  return { group, dome, stars, sun, moon, hemi, uniforms, setPalette, update };
 }

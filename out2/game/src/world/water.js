@@ -1,6 +1,6 @@
 // The sea and the channel, as one animated fragment shader on a single large plane.
 // Two crossing swells, a fresnel lift at glancing angles, a sun path that follows the
-// clock's sun and manual exponential fog so the far water dissolves into the same haze
+// clock's sun, and manual exponential fog so the far water dissolves into the same haze
 // as the sky. No reflection pass, no normal map: cheap enough for every frame.
 
 import { WATER } from './plan.js';
@@ -34,17 +34,16 @@ const FRAGMENT = /* glsl */ `
     vec3 view = normalize(vView);
     float dist = length(vView);
 
-    // Two crossing swells plus a fine chop; the derivatives give a cheap normal.
-    vec2 p = vWorld.xz;
-    float w1 = sin(p.x * 0.055 + uTime * 0.85) * 0.55;
-    float w2 = sin(p.y * 0.041 - uTime * 0.62 + p.x * 0.02) * 0.5;
-    float w3 = sin((p.x + p.y) * 0.11 + uTime * 1.4) * 0.18;
-    float wave = w1 + w2 + w3;
-    vec3 normal = normalize(vec3(
-      -(cos(p.x * 0.055 + uTime * 0.85) * 0.055 * 0.55 + cos((p.x + p.y) * 0.11 + uTime * 1.4) * 0.11 * 0.18),
-      1.0,
-      -(cos(p.y * 0.041 - uTime * 0.62 + p.x * 0.02) * 0.041 * 0.5 + cos((p.x + p.y) * 0.11 + uTime * 1.4) * 0.11 * 0.18)
-    ));
+    // Two crossing swells plus a fine chop; the analytic derivatives give a cheap normal.
+    vec2 p = vWorld.xz; // p.y is world z after the swizzle.
+    float s1 = p.x * 0.055 + uTime * 0.85;
+    float s2 = p.y * 0.041 - uTime * 0.62 + p.x * 0.02;
+    float s3 = (p.x + p.y) * 0.11 + uTime * 1.4;
+    float wave = sin(s1) * 0.55 + sin(s2) * 0.5 + sin(s3) * 0.18;
+
+    float dx = cos(s1) * 0.055 * 0.55 + cos(s3) * 0.11 * 0.18;
+    float dz = cos(s2) * 0.041 * 0.5 + cos(s3) * 0.11 * 0.18;
+    vec3 normal = normalize(vec3(-dx, 1.0, -dz));
 
     float facing = clamp(dot(view, normal), 0.0, 1.0);
     float fresnel = pow(1.0 - facing, 3.0);
@@ -62,7 +61,7 @@ const FRAGMENT = /* glsl */ `
     float foam = smoothstep(0.72, 1.05, wave) * 0.09;
     water += vec3(foam) * (0.6 + uHaze * 0.5);
 
-    // Manual fog, matched to the scene's exponential fog.
+    // Manual fog, matched to the scene's exponential-squared fog.
     float fogFactor = 1.0 - exp(-uFogDensity * uFogDensity * dist * dist);
     water = mix(water, uFogColor, clamp(fogFactor, 0.0, 1.0));
 
@@ -93,8 +92,8 @@ export function createWater(plan, options = {}) {
     depthWrite: true,
     fog: false,
   });
-  const geometry = new THREE.PlaneGeometry(6000, 6000, 1, 1);
-  const mesh = new THREE.Mesh(geometry, material);
+  // One quad: the shader does all the work, so there is nothing to tessellate.
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(6000, 6000, 1, 1), material);
   mesh.name = 'water';
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(160, WATER.level, -100);
@@ -106,18 +105,28 @@ export function createWater(plan, options = {}) {
   function update(dt, palette, weather = null) {
     time += dt;
     uniforms.uTime.value = time;
-    if (palette) {
-      uniforms.uSunColor.value.setRGB(...palette.sunColor);
-      uniforms.uSunDir.value.copy(palette.sunDir);
-      uniforms.uHorizon.value.setRGB(...palette.skyHorizon);
-      uniforms.uFogColor.value.setRGB(...palette.fogColor);
-      uniforms.uFogDensity.value = palette.fogDensity * (weather?.fogMultiplier ?? 1);
-      uniforms.uHaze.value = weather?.haze ?? 0.2;
-      const night = palette.night ?? 0;
-      uniforms.uDeep.value.setRGB(0.05 + night * 0.01, 0.18 - night * 0.09, 0.24 - night * 0.12);
-      uniforms.uShallow.value.setRGB(0.18 - night * 0.1, 0.44 - night * 0.26, 0.47 - night * 0.28);
-    }
+    if (!palette) return;
+
+    uniforms.uSunColor.value.setRGB(...palette.sunColor);
+    uniforms.uSunDir.value.copy(palette.sunDir);
+    uniforms.uHorizon.value.setRGB(...palette.skyHorizon);
+    uniforms.uFogColor.value.setRGB(...palette.fogColor);
+    uniforms.uFogDensity.value = palette.fogDensity * (weather?.fogMultiplier ?? 1);
+    uniforms.uHaze.value = weather?.haze ?? 0.2;
+
+    // Night water loses its colour rather than its contrast, hence the small offsets.
+    const night = palette.night ?? 0;
+    uniforms.uDeep.value.setRGB(0.05 + night * 0.01, 0.18 - night * 0.09, 0.24 - night * 0.12);
+    uniforms.uShallow.value.setRGB(0.18 - night * 0.1, 0.44 - night * 0.26, 0.47 - night * 0.28);
   }
 
-  return { mesh, material, uniforms, update, get time() { return time; } };
+  return {
+    mesh,
+    material,
+    uniforms,
+    update,
+    get time() {
+      return time;
+    },
+  };
 }

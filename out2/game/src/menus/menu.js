@@ -2,14 +2,16 @@
 // panel every other screen shares, and the two story cards (wasted/busted, mission
 // complete). It is plain DOM above the canvas, so it works before pointer lock, without
 // the WebGL context and with a mouse or the arrow keys: every button is reachable by Tab,
-// Enter and Escape returns one screen, never to a dead end.
+// Enter, and Escape returns one screen, never to a dead end.
 //
 // The menu never simulates the game. It pauses the loop, lets the last frame stay on the
 // canvas behind a scrim, and resumes when the player chooses. The shot rig hides it.
 
-import { hasSave, loadSave, writeSave, snapshotGame, restoreGame, clearSave } from '../state/save.js';
+import { hasSave, loadSave, writeSave, snapshotGame, restoreGame, clearSave, settingsSnapshot } from '../state/save.js';
 
 const SCREENS = ['start', 'pause', 'settings', 'credits', 'end', 'complete'];
+/** How long the mission-complete card stays up before it closes itself. */
+const COMPLETE_SECONDS = 4.8;
 
 export class MenuUI {
   constructor({ game, settings, audio = null, perf = null, onSaved = null }) {
@@ -19,11 +21,9 @@ export class MenuUI {
     this.perf = perf;
     this.onSaved = onSaved;
     this.screen = null;
-    this.returnTo = 'start';
     this.root = null;
     this.settingsFrom = 'start';
     this.completeTimer = 0;
-    this.bound = false;
     this._build();
     this._bindKeys();
     this._bindEvents();
@@ -49,6 +49,21 @@ export class MenuUI {
       return node;
     };
 
+    const card = (parent, className) => {
+      const node = document.createElement('div');
+      node.className = `menu-card ${className}`;
+      parent.append(node);
+      return node;
+    };
+
+    const text = (tag, className, parent, content) => {
+      const node = document.createElement(tag);
+      node.className = className;
+      node.textContent = content;
+      parent.append(node);
+      return node;
+    };
+
     const button = (parent, label, action, kind = '') => {
       const node = document.createElement('button');
       node.type = 'button';
@@ -62,97 +77,75 @@ export class MenuUI {
       return node;
     };
 
+    const buttonRow = (parent) => {
+      const row = document.createElement('div');
+      row.className = 'menu-buttons';
+      parent.append(row);
+      return row;
+    };
+
     // ------------------------------------------------------------ start
-    const start = screen('start');
-    const startCard = document.createElement('div');
-    startCard.className = 'menu-card menu-card-start';
-    start.append(startCard);
-    const mark = document.createElement('div');
-    mark.className = 'menu-mark';
-    mark.textContent = 'SOLMARA';
-    startCard.append(mark);
-    const title = document.createElement('h1');
-    title.className = 'menu-title';
-    title.textContent = 'STREETS';
-    startCard.append(title);
-    const subtitle = document.createElement('p');
-    subtitle.className = 'menu-subtitle';
-    subtitle.textContent = 'A sun-soaked coastal city. One stolen coupe. Three hundred days of summer.';
-    startCard.append(subtitle);
-    const startButtons = document.createElement('div');
-    startButtons.className = 'menu-buttons';
-    startCard.append(startButtons);
+    const startCard = card(screen('start'), 'menu-card-start');
+    text('div', 'menu-mark', startCard, 'SOLMARA');
+    text('h1', 'menu-title', startCard, 'STREETS');
+    text(
+      'p',
+      'menu-subtitle',
+      startCard,
+      'A sun-soaked coastal city. One stolen coupe. Three hundred days of summer.',
+    );
+    const startButtons = buttonRow(startCard);
     this.playButton = button(startButtons, 'Play', () => this.startNew());
     this.continueButton = button(startButtons, 'Continue', () => this.continueGame());
     button(startButtons, 'Settings', () => this.openSettings('start'));
     button(startButtons, 'Credits', () => this.show('credits'));
     this.continueButton.disabled = !hasSave();
-    const keyline = document.createElement('p');
-    keyline.className = 'menu-keyline';
-    keyline.textContent = 'WASD walk · Shift sprint · E talk · F steal · LMB fight · V camera · Esc pause';
-    startCard.append(keyline);
+    text(
+      'p',
+      'menu-keyline',
+      startCard,
+      'WASD walk · Shift sprint · E talk · F steal · LMB fight · V camera · Esc pause',
+    );
 
     // ------------------------------------------------------------ pause
-    const pause = screen('pause');
-    const pauseCard = document.createElement('div');
-    pauseCard.className = 'menu-card menu-card-pause';
-    pause.append(pauseCard);
-    const paused = document.createElement('div');
-    paused.className = 'menu-eyebrow';
-    paused.textContent = 'PAUSED';
-    pauseCard.append(paused);
-    const pauseTitle = document.createElement('h2');
-    pauseTitle.className = 'menu-title-sm';
-    pauseTitle.textContent = 'Solmara can wait.';
-    pauseCard.append(pauseTitle);
-    const pauseButtons = document.createElement('div');
-    pauseButtons.className = 'menu-buttons';
-    pauseCard.append(pauseButtons);
+    const pauseCard = card(screen('pause'), 'menu-card-pause');
+    text('div', 'menu-eyebrow', pauseCard, 'PAUSED');
+    text('h2', 'menu-title-sm', pauseCard, 'Solmara can wait.');
+    const pauseButtons = buttonRow(pauseCard);
     button(pauseButtons, 'Resume', () => this.resume());
     button(pauseButtons, 'Settings', () => this.openSettings('pause'));
     button(pauseButtons, 'Quit to menu', () => this.quitToMenu());
-    const pauseFoot = document.createElement('p');
-    pauseFoot.className = 'menu-keyline';
-    pauseFoot.textContent = 'Esc resumes · progress saves when you pause';
-    pauseCard.append(pauseFoot);
+    text('p', 'menu-keyline', pauseCard, 'Esc resumes · progress saves when you pause');
 
     // ------------------------------------------------------------ settings
-    const settingsScreen = screen('settings');
-    const settingsCard = document.createElement('div');
-    settingsCard.className = 'menu-card menu-card-settings';
-    settingsScreen.append(settingsCard);
-    const settingsTitle = document.createElement('h2');
-    settingsTitle.className = 'menu-title-sm';
-    settingsTitle.textContent = 'SETTINGS';
-    settingsCard.append(settingsTitle);
+    const settingsCard = card(screen('settings'), 'menu-card-settings');
+    text('h2', 'menu-title-sm', settingsCard, 'SETTINGS');
     const grid = document.createElement('div');
     grid.className = 'menu-settings';
     settingsCard.append(grid);
     this.rows = {};
 
-    const row = (label, hint) => {
+    const row = (label, hint = null) => {
       const line = document.createElement('label');
       line.className = 'menu-setting';
-      const name = document.createElement('span');
-      name.className = 'menu-setting-label';
-      name.textContent = label;
-      line.append(name);
-      if (hint) {
-        const note = document.createElement('span');
-        note.className = 'menu-setting-hint';
-        note.textContent = hint;
-        line.append(note);
-      }
+      text('span', 'menu-setting-label', line, label);
+      if (hint) text('span', 'menu-setting-hint', line, hint);
       grid.append(line);
       return line;
     };
 
+    const control = (line) => {
+      const wrap = document.createElement('span');
+      wrap.className = 'menu-setting-control';
+      line.append(wrap);
+      return wrap;
+    };
+
     const slider = (key, label, min, max, step, format) => {
       const line = row(label);
-      const control = document.createElement('span');
-      control.className = 'menu-setting-control';
-      const value = document.createElement('output');
-      value.className = 'menu-setting-value';
+      const wrap = control(line);
+      const output = document.createElement('output');
+      output.className = 'menu-setting-value';
       const input = document.createElement('input');
       input.type = 'range';
       input.min = String(min);
@@ -161,33 +154,30 @@ export class MenuUI {
       input.className = 'menu-slider';
       input.dataset.setting = key;
       input.addEventListener('input', () => {
-        value.textContent = format(Number(input.value));
-        this._applyLive(key, Number(input.value));
+        output.textContent = format(Number(input.value));
+        this.applyLive(key, Number(input.value));
       });
       input.addEventListener('change', () => this.saveSettings());
-      control.append(input, value);
-      line.append(control);
-      this.rows[key] = { input, value, format };
+      wrap.append(input, output);
+      this.rows[key] = { input, value: output, format };
       return input;
     };
 
     const toggle = (key, label, onChange = null) => {
       const line = row(label);
-      const control = document.createElement('span');
-      control.className = 'menu-setting-control';
+      const wrap = control(line);
       const input = document.createElement('input');
       input.type = 'checkbox';
       input.className = 'menu-toggle';
       input.dataset.setting = key;
       input.addEventListener('change', () => {
         this.click();
-        if (onChange) onChange(input.checked);
-        this._applyLive(key, input.checked);
+        onChange?.(input.checked);
+        this.applyLive(key, input.checked);
         this.saveSettings();
       });
-      control.append(input);
-      line.append(control);
-      this.rows[key] = { input, format: (v) => (v ? 'on' : 'off') };
+      wrap.append(input);
+      this.rows[key] = { input, format: (value) => (value ? 'on' : 'off') };
       return input;
     };
 
@@ -196,30 +186,27 @@ export class MenuUI {
     slider('pedestrians', 'Pedestrians', 0, 48, 1, (v) => `${v} people`);
     slider('sensitivity', 'Camera sensitivity', 0.55, 2.4, 0.05, (v) => `${v.toFixed(2)}×`);
 
+    // Shadow quality is a two-state segmented control rather than a checkbox.
     const shadowLine = row('Shadow quality');
-    const shadowControl = document.createElement('span');
-    shadowControl.className = 'menu-setting-control menu-segmented';
+    const shadowWrap = control(shadowLine);
+    shadowWrap.classList.add('menu-segmented');
     const shadowOff = document.createElement('button');
     shadowOff.type = 'button';
     shadowOff.textContent = 'Off';
     const shadowLow = document.createElement('button');
     shadowLow.type = 'button';
     shadowLow.textContent = 'Low';
-    shadowControl.append(shadowOff, shadowLow);
-    shadowLine.append(shadowControl);
+    shadowWrap.append(shadowOff, shadowLow);
     this.shadowButtons = { off: shadowOff, low: shadowLow };
-    shadowOff.addEventListener('click', () => {
-      this.click();
-      this._applyLive('shadows', 'off');
-      this.saveSettings();
-    });
-    shadowLow.addEventListener('click', () => {
-      this.click();
-      this._applyLive('shadows', 'low');
-      this.saveSettings();
-    });
+    for (const [node, value] of [[shadowOff, 'off'], [shadowLow, 'low']]) {
+      node.addEventListener('click', () => {
+        this.click();
+        this.applyLive('shadows', value);
+        this.saveSettings();
+      });
+    }
 
-    toggle('post', 'Post processing', null);
+    toggle('post', 'Post processing');
     toggle('mute', 'Mute all audio', (muted) => this.audio?.setMuted(muted));
     toggle('fps', 'Show frame rate', (shown) => this.perf?.toggle(shown));
 
@@ -227,31 +214,30 @@ export class MenuUI {
     settingsButtons.className = 'menu-buttons menu-buttons-row';
     settingsCard.append(settingsButtons);
     button(settingsButtons, 'Back', () => this.closeSettings(), 'is-quiet');
-    this.settingsNote = document.createElement('p');
-    this.settingsNote.className = 'menu-keyline';
-    this.settingsNote.textContent = 'Changes apply at once; Back keeps them and writes the save.';
-    settingsCard.append(this.settingsNote);
+    text(
+      'p',
+      'menu-keyline',
+      settingsCard,
+      'Changes apply at once; Back keeps them and writes the save.',
+    );
 
     // ------------------------------------------------------------ credits
-    const credits = screen('credits');
-    const creditsCard = document.createElement('div');
-    creditsCard.className = 'menu-card menu-card-start';
-    credits.append(creditsCard);
-    const creditsEyebrow = document.createElement('div');
-    creditsEyebrow.className = 'menu-eyebrow';
-    creditsEyebrow.textContent = 'CREDITS';
-    creditsCard.append(creditsEyebrow);
-    const creditsTitle = document.createElement('h2');
-    creditsTitle.className = 'menu-title-sm';
-    creditsTitle.textContent = 'SOLMARA STREETS';
-    creditsCard.append(creditsTitle);
+    const creditsCard = card(screen('credits'), 'menu-card-start');
+    text('div', 'menu-eyebrow', creditsCard, 'CREDITS');
+    text('h2', 'menu-title-sm', creditsCard, 'SOLMARA STREETS');
     const creditsText = document.createElement('div');
     creditsText.className = 'menu-credits';
-    creditsText.innerHTML =
-      '<p>An open-city entry for make.fun gta6-01.</p>' +
-      '<p>Built with three.js, one canvas and no downloaded assets: every road, tower, palm, engine tone and chord is generated in the browser.</p>' +
-      '<p>City, driving, traffic, crowd, fighting, police and story by the Solmara build sessions.</p>' +
-      '<p class="menu-dim">Sound is Web Audio only. Music is a procedural loop that follows the district and the hour.</p>';
+    for (const [line, className] of [
+      ['An open-city entry for make.fun gta6-01.', null],
+      [
+        'Built with three.js, one canvas and no downloaded assets: every road, tower, palm, engine tone and chord is generated in the browser.',
+        null,
+      ],
+      ['City, driving, traffic, crowd, fighting, police and story by the Solmara build sessions.', null],
+      ['Sound is Web Audio only. Music is a procedural loop that follows the district and the hour.', 'menu-dim'],
+    ]) {
+      text('p', className ?? '', creditsText, line);
+    }
     creditsCard.append(creditsText);
     const creditsButtons = document.createElement('div');
     creditsButtons.className = 'menu-buttons menu-buttons-row';
@@ -259,18 +245,9 @@ export class MenuUI {
     button(creditsButtons, 'Back', () => this.closeCredits(), 'is-quiet');
 
     // ------------------------------------------------------------ wasted / busted
-    const end = screen('end');
-    const endCard = document.createElement('div');
-    endCard.className = 'menu-card menu-card-end';
-    end.append(endCard);
-    this.endTitle = document.createElement('div');
-    this.endTitle.className = 'menu-end-title';
-    this.endTitle.textContent = 'WASTED';
-    endCard.append(this.endTitle);
-    this.endText = document.createElement('p');
-    this.endText.className = 'menu-subtitle';
-    this.endText.textContent = 'You wake up at the hospital.';
-    endCard.append(this.endText);
+    const endCard = card(screen('end'), 'menu-card-end');
+    this.endTitle = text('div', 'menu-end-title', endCard, 'WASTED');
+    this.endText = text('p', 'menu-subtitle', endCard, 'You wake up at the hospital.');
     const endButtons = document.createElement('div');
     endButtons.className = 'menu-buttons menu-buttons-row';
     endCard.append(endButtons);
@@ -278,20 +255,10 @@ export class MenuUI {
     button(endButtons, 'Quit to menu', () => this.quitToMenu(), 'is-quiet');
 
     // ------------------------------------------------------------ mission complete
-    const complete = screen('complete');
-    const completeCard = document.createElement('div');
-    completeCard.className = 'menu-card menu-card-complete';
-    complete.append(completeCard);
-    const completeEyebrow = document.createElement('div');
-    completeEyebrow.className = 'menu-eyebrow is-gold';
-    completeEyebrow.textContent = 'MISSION COMPLETE';
-    completeCard.append(completeEyebrow);
-    this.completeTitle = document.createElement('h2');
-    this.completeTitle.className = 'menu-title-sm';
-    completeCard.append(this.completeTitle);
-    this.completeText = document.createElement('p');
-    this.completeText.className = 'menu-subtitle';
-    completeCard.append(this.completeText);
+    const completeCard = card(screen('complete'), 'menu-card-complete');
+    text('div', 'menu-eyebrow is-gold', completeCard, 'MISSION COMPLETE');
+    this.completeTitle = text('h2', 'menu-title-sm', completeCard, '');
+    this.completeText = text('p', 'menu-subtitle', completeCard, '');
     const completeButtons = document.createElement('div');
     completeButtons.className = 'menu-buttons menu-buttons-row';
     completeCard.append(completeButtons);
@@ -301,45 +268,50 @@ export class MenuUI {
   // ---------------------------------------------------------------- wiring
   _bindKeys() {
     window.addEventListener('keydown', (event) => {
+      // A shot owns the keyboard; the menus stay out of it entirely.
       if (this.game?.settings?.shot || this.game?.shots?.active) return;
-      if (event.code === 'Escape') {
-        if (this.screen === 'settings') {
-          event.preventDefault();
-          this.closeSettings();
-        } else if (this.screen === 'credits') {
-          event.preventDefault();
-          this.closeCredits();
-        } else if (this.screen === 'start') {
-          // No dead end: Escape on the title screen starts the default game.
-          event.preventDefault();
-          if (!this.continueButton.disabled) this.continueGame();
-          else this.startNew();
-        } else if (this.screen === 'pause') {
-          event.preventDefault();
-          this.resume();
-        } else if (this.screen === 'end') {
-          event.preventDefault();
-          this.continueAfterDown();
-        } else if (this.screen === 'complete') {
-          event.preventDefault();
-          this.hideComplete();
-        } else if (!this.screen) {
-          event.preventDefault();
-          this.pause();
-        }
-      }
+      if (event.code === 'Escape') this.handleEscape(event);
       if (this.screen === 'pause' && event.code === 'KeyP') {
         event.preventDefault();
         this.resume();
       }
       if (this.screen && (event.code === 'ArrowDown' || event.code === 'ArrowUp')) {
         event.preventDefault();
-        this._moveFocus(event.code === 'ArrowDown' ? 1 : -1);
+        this.moveFocus(event.code === 'ArrowDown' ? 1 : -1);
       }
     });
   }
 
-  _moveFocus(direction) {
+  /** Escape goes back one screen, and never leaves the player stuck. */
+  handleEscape(event) {
+    event.preventDefault();
+    switch (this.screen) {
+      case 'settings':
+        this.closeSettings();
+        return;
+      case 'credits':
+        this.closeCredits();
+        return;
+      case 'start':
+        // A dead end would be a bug: Escape on the title starts the saved or the new game.
+        if (!this.continueButton.disabled) this.continueGame();
+        else this.startNew();
+        return;
+      case 'pause':
+        this.resume();
+        return;
+      case 'end':
+        this.continueAfterDown();
+        return;
+      case 'complete':
+        this.hideComplete();
+        return;
+      default:
+        this.pause();
+    }
+  }
+
+  moveFocus(direction) {
     const buttons = [...this.root.querySelectorAll('button:not([disabled])')].filter((node) => node.offsetParent !== null);
     if (!buttons.length) return;
     const index = buttons.indexOf(document.activeElement);
@@ -369,7 +341,10 @@ export class MenuUI {
     document.body.dataset.menu = name;
     this.root.classList.toggle('is-start', name === 'start');
     const first = this.screens[name].querySelector('button:not([disabled])');
-    if (first) setTimeout(() => first.focus({ preventScroll: true }), 30);
+    // Focus only if this screen is still the one on show when the timer fires.
+    if (first) setTimeout(() => {
+      if (this.screen === name) first.focus({ preventScroll: true });
+    }, 30);
   }
 
   hide() {
@@ -379,7 +354,7 @@ export class MenuUI {
     delete document.body.dataset.menu;
   }
 
-  /** Called once at boot: title over the paused world. */
+  /** Called once at boot: the title over the paused world. */
   boot() {
     this.game.loop.setPaused(true);
     this.game.input.enabled = false;
@@ -389,7 +364,8 @@ export class MenuUI {
 
   startNew() {
     clearSave();
-    const game = this.game;
+    const { game } = this;
+
     if (game.missions) {
       game.missions.money = 750;
       game.missions.completed = [];
@@ -400,6 +376,7 @@ export class MenuUI {
       game.combat.armour = 0;
       game.combat.downKind = null;
     }
+
     const spawn = game.world.spawnById('downtown-boulevard') ?? { x: 340, z: 80, heading: 0 };
     game.player.teleport(spawn.x - 10.8, spawn.z - 20, 0);
     game.player.character?.rest();
@@ -408,9 +385,10 @@ export class MenuUI {
       game.cameraRig.anchor.z = game.player.position.z;
       game.cameraRig.yaw = 0;
     }
+
     this.resume();
-    this.game.hud?.notify('Solmara is yours. Press E at Rosa to start.', 'info');
-    this._persist();
+    game.hud?.notify('Solmara is yours. Press E at Rosa to start.', 'info');
+    this.persist();
   }
 
   continueGame() {
@@ -429,7 +407,7 @@ export class MenuUI {
     this.game.loop.setPaused(true);
     this.game.input.enabled = false;
     this.game.input.releaseLock?.();
-    this._persist();
+    this.persist();
     this.show('pause');
   }
 
@@ -442,7 +420,7 @@ export class MenuUI {
   }
 
   quitToMenu() {
-    this._persist();
+    this.persist();
     this.game.loop.setPaused(true);
     this.game.input.enabled = false;
     this.game.input.releaseLock?.();
@@ -452,14 +430,13 @@ export class MenuUI {
 
   openSettings(from) {
     this.settingsFrom = from;
-    this._fillSettings();
+    this.fillSettings();
     this.show('settings');
   }
 
   closeSettings() {
     this.saveSettings();
-    if (this.settingsFrom === 'pause') this.show('pause');
-    else this.show('start');
+    this.show(this.settingsFrom === 'pause' ? 'pause' : 'start');
   }
 
   closeCredits() {
@@ -471,10 +448,10 @@ export class MenuUI {
     this.game.input.enabled = false;
     // Let go of pointer lock, or the cursor cannot reach the two buttons below.
     this.game.input.releaseLock?.();
-    this.endTitle.textContent = kind === 'busted' ? 'BUSTED' : 'WASTED';
-    this.endTitle.classList.toggle('is-busted', kind === 'busted');
-    this.endText.textContent =
-      kind === 'busted' ? 'The precinct lets you out at the station.' : 'You wake up at the hospital.';
+    const busted = kind === 'busted';
+    this.endTitle.textContent = busted ? 'BUSTED' : 'WASTED';
+    this.endTitle.classList.toggle('is-busted', busted);
+    this.endText.textContent = busted ? 'The precinct lets you out at the station.' : 'You wake up at the hospital.';
     this.show('end');
   }
 
@@ -498,23 +475,22 @@ export class MenuUI {
     // The card does not stop the drive, but it does free the cursor for its one button.
     this.game.input.releaseLock?.();
     this.show('complete');
-    this.completeTimer = 4.8;
-    this._persist();
+    this.completeTimer = COMPLETE_SECONDS;
+    this.persist();
   }
 
   hideComplete() {
-    if (this.screen === 'complete') {
-      this.hide();
-      if (!this.game.loop.paused) {
-        this.game.input.enabled = true;
-        this.game.input.requestLock?.();
-      }
+    if (this.screen !== 'complete') return;
+    this.hide();
+    if (!this.game.loop.paused) {
+      this.game.input.enabled = true;
+      this.game.input.requestLock?.();
     }
   }
 
   // ---------------------------------------------------------------- settings
-  _fillSettings() {
-    const s = this.settings;
+  fillSettings() {
+    const settings = this.settings;
     const put = (key, value) => {
       const row = this.rows[key];
       if (!row) return;
@@ -522,67 +498,80 @@ export class MenuUI {
       else row.input.value = String(value);
       if (row.value) row.value.textContent = row.format(Number(value));
     };
-    put('drawDistance', s.drawDistance);
-    put('traffic', s.trafficCount);
-    put('pedestrians', s.pedestrianCount);
-    put('sensitivity', s.cameraSensitivity);
-    put('post', s.postProcessing);
-    put('mute', s.muted);
-    put('fps', s.showFps);
-    const shadows = s.shadowQuality === 'low' ? 'low' : 'off';
+    put('drawDistance', settings.drawDistance);
+    put('traffic', settings.trafficCount);
+    put('pedestrians', settings.pedestrianCount);
+    put('sensitivity', settings.cameraSensitivity);
+    put('post', settings.postProcessing);
+    put('mute', settings.muted);
+    put('fps', settings.showFps);
+
+    const shadows = settings.shadowQuality === 'low' ? 'low' : 'off';
     this.shadowButtons.off.classList.toggle('is-on', shadows === 'off');
     this.shadowButtons.low.classList.toggle('is-on', shadows === 'low');
   }
 
-  /** Applies one live control. main.js owns the systems, so every change is also a bus event. */
-  _applyLive(key, value) {
-    const s = this.settings;
-    const game = this.game;
-    if (key === 'drawDistance') {
-      s.drawDistance = value;
-      if (game.camera) {
-        game.camera.far = value;
-        game.camera.updateProjectionMatrix();
-      }
-      game.world?.setDrawDistance?.(value);
-    } else if (key === 'traffic') {
-      s.trafficCount = value;
-      game.traffic?.setCount?.(value);
-    } else if (key === 'pedestrians') {
-      s.pedestrianCount = value;
-      game.pedestrians?.setCount?.(value);
-    } else if (key === 'sensitivity') {
-      s.cameraSensitivity = value;
-      if (game.input) game.input.pointerSensitivity = 0.0022 * value;
-    } else if (key === 'shadows') {
-      s.shadowQuality = value;
-      s.shadows = value !== 'off';
-      game.renderer.shadowMap.enabled = s.shadows;
-      game.renderer.shadowMap.needsUpdate = true;
-      game.world?.setShadows?.(s.shadows);
-      this._fillSettings();
-    } else if (key === 'post') {
-      s.postProcessing = Boolean(value);
-      document.body.classList.toggle('post-on', s.postProcessing);
-    } else if (key === 'mute') {
-      s.muted = Boolean(value);
-      this.audio?.setMuted(s.muted);
-    } else if (key === 'fps') {
-      s.showFps = Boolean(value);
-      this.perf?.toggle(s.showFps);
+  /** Applies one live control. main.js owns the systems, so every change is a bus event. */
+  applyLive(key, value) {
+    const settings = this.settings;
+    const { game } = this;
+
+    switch (key) {
+      case 'drawDistance':
+        settings.drawDistance = value;
+        if (game.camera) {
+          game.camera.far = value;
+          game.camera.updateProjectionMatrix();
+        }
+        game.world?.setDrawDistance?.(value);
+        break;
+      case 'traffic':
+        settings.trafficCount = value;
+        game.traffic?.setCount?.(value);
+        break;
+      case 'pedestrians':
+        settings.pedestrianCount = value;
+        game.pedestrians?.setCount?.(value);
+        break;
+      case 'sensitivity':
+        settings.cameraSensitivity = value;
+        if (game.input) game.input.pointerSensitivity = 0.0022 * value;
+        break;
+      case 'shadows':
+        settings.shadowQuality = value;
+        settings.shadows = value !== 'off';
+        game.renderer.shadowMap.enabled = settings.shadows;
+        game.renderer.shadowMap.needsUpdate = true;
+        game.world?.setShadows?.(settings.shadows);
+        this.fillSettings();
+        break;
+      case 'post':
+        settings.postProcessing = Boolean(value);
+        document.body.classList.toggle('post-on', settings.postProcessing);
+        break;
+      case 'mute':
+        settings.muted = Boolean(value);
+        this.audio?.setMuted(settings.muted);
+        break;
+      case 'fps':
+        settings.showFps = Boolean(value);
+        this.perf?.toggle(settings.showFps);
+        break;
+      default:
+        return;
     }
-    game.bus?.emit('settings:change', { key, value, snapshot: s.snapshot() });
+    game.bus?.emit('settings:change', { key, value, snapshot: settings.snapshot() });
   }
 
   saveSettings() {
-    writeSave({ settings: { ...writeSaveSettings(this.settings) } });
+    writeSave({ settings: settingsSnapshot(this.settings) });
     this.game.bus?.emit('save:write', { reason: 'settings' });
   }
 
   // ---------------------------------------------------------------- save
-  _persist() {
+  persist() {
     const snapshot = snapshotGame(this.game);
-    snapshot.settings = writeSaveSettings(this.settings);
+    snapshot.settings = settingsSnapshot(this.settings);
     writeSave(snapshot);
     this.onSaved?.(snapshot);
     this.game.bus?.emit('save:write', { reason: 'menu', money: snapshot.money });
@@ -590,25 +579,10 @@ export class MenuUI {
 
   /** The per-frame tick: hides the mission card after its wall-clock timeout. */
   update(dt) {
-    if (this.completeTimer > 0) {
-      this.completeTimer -= dt;
-      if (this.completeTimer <= 0) this.hideComplete();
-    }
+    if (this.completeTimer <= 0) return;
+    this.completeTimer -= dt;
+    if (this.completeTimer <= 0) this.hideComplete();
   }
-}
-
-/** The settings record written by the save module, kept in one shape. */
-function writeSaveSettings(settings) {
-  return {
-    drawDistance: settings.drawDistance,
-    traffic: settings.trafficCount,
-    pedestrians: settings.pedestrianCount,
-    shadows: settings.shadowQuality,
-    post: Boolean(settings.postProcessing),
-    sensitivity: settings.cameraSensitivity,
-    mute: Boolean(settings.muted),
-    showFps: Boolean(settings.showFps),
-  };
 }
 
 export function createMenus(options) {

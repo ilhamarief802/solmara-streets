@@ -1,6 +1,8 @@
 /* Solmara Streets page shell. No external fonts, no images: the palette and the boot
    card are pure CSS, and the only moving part is the fade of the boot overlay. */
 
+/* Page chrome and the HUD draw from these tokens; retune a colour here, not in a rule. */
+
 :root {
   --ink: #10161f;
   --paper: #f3e7cf;

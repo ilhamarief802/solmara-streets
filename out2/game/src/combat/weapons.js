@@ -1,8 +1,9 @@
-// The weapon table. Fists, a pistol and a shotgun: one number each for damage, reach,
+// The weapon table. Fists, a pistol and a shotgun: one record each for damage, reach,
 // cadence, magazine and reserve, so the combat system has no special cases beyond melee.
 // Nothing here touches the scene or the DOM.
 
 export const WEAPONS = {
+  // Fists carry an infinite clip and reserve, so the reload path never applies to them.
   fists: {
     id: 'fists',
     name: 'Fists',

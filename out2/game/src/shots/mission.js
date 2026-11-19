@@ -23,7 +23,9 @@ export default {
     game.traffic.placeAhead(-358, 84, Math.PI, { distance: 18, count: 3, spacing: 18 });
     game.pedestrians.reset(seed, -358, 84, 30);
     game.pedestrians.placeAround(-360, 78, 5, 40);
-    // Two of them on the pavement in the sight line to the market, so the walk is alive.
+
+    // Two of them on the pavement in the sight line to the market, so the walk is alive:
+    // only their pose is scripted, the walk itself stays live.
     const stage = (index, x, z) => {
       const ped = game.pedestrians.peds[index];
       if (!ped) return;
@@ -80,10 +82,11 @@ export default {
   },
   update(ctx, elapsed) {
     const t = easeInOutCubic(clamp01(elapsed / 9));
+    // A very short creep down the quay: enough that the frame is not a freeze.
     const px = this.origin.x + (this.target.x - this.origin.x) * 0.05 * t;
     const pz = this.origin.z + (this.target.z - this.origin.z) * 0.03 * t;
-    const py = this.origin.y - t * 0.14;
-    ctx.camera.position.set(px, py, pz);
+
+    ctx.camera.position.set(px, this.origin.y - t * 0.14, pz);
     ctx.camera.lookAt(this.target.x, this.target.y, this.target.z);
   },
 };

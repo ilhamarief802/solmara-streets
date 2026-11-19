@@ -1,10 +1,19 @@
-// Assembles Solmara. Given one seed, this builds the plan, paints the textures, raises
-// the terrain, streets, highway, buildings, landmarks, props and sea, registers every
-// collider, and returns the single object later sessions build on: the road graph, named
-// spawns, district lookup, collision and ground queries, minimap geometry, and the update
-// hook that turns window lights and street lamps on at dusk.
+// Assembles Solmara. Given one seed, this builds the plan, paints the textures, raises the
+// terrain, streets, highway, buildings, landmarks, props and sea, registers every
+// collider, and returns the single object the rest of the game builds on: the road graph,
+// named spawns, district lookup, collision and ground queries, minimap geometry, and the
+// update hook that turns window lights and street lamps on at dusk.
 
-import { createCityPlan, nearestLanePoint, nearestRoadNode, districtAt, isWaterAt, isOnLand, GRID, WATER, HIGHWAY } from './plan.js';
+import {
+  createCityPlan,
+  nearestLanePoint,
+  nearestRoadNode,
+  isWaterAt,
+  isOnLand,
+  GRID,
+  WATER,
+  HIGHWAY,
+} from './plan.js';
 import { DISTRICTS, DISTRICT_IDS, LAND_BOUNDS, districtIdAt, districtOf } from './districts.js';
 import { TextureLibrary } from './textures.js';
 import { createColliders } from './colliders.js';
@@ -18,12 +27,14 @@ import { createWalkNetwork } from './sidewalks.js';
 
 /**
  * Builds the whole city.
- * @param {object} options { seed, renderer, settings, onStage }
+ * @param {object} options { seed, renderer, settings, lite, onStage }
  */
 export function createWorld(options = {}) {
   const seed = options.seed ?? 'solmara-01';
   const settings = options.settings ?? { propDensity: 1 };
   const onStage = options.onStage ?? (() => {});
+  // `lite` drops the costly facade passes; the software-rasteriser path in main.js sets it.
+  const lite = Boolean(options.lite);
   const started = performance.now();
 
   onStage('planning the districts');
@@ -42,7 +53,6 @@ export function createWorld(options = {}) {
   group.add(roads.group);
 
   onStage('raising the skyline');
-  const lite = Boolean(options.lite);
   const buildings = buildBuildings(plan, textures, colliders, { detail: settings.propDensity, lite });
   group.add(buildings.group);
 
@@ -56,6 +66,7 @@ export function createWorld(options = {}) {
 
   onStage('dressing the streets');
   const props = buildProps(plan, textures, colliders, {
+    // Half the furniture is enough to read as a street on a software rasteriser.
     detail: lite ? Math.min(settings.propDensity, 0.5) : settings.propDensity,
     parkedCars: false,
   });
@@ -65,18 +76,22 @@ export function createWorld(options = {}) {
   const water = createWater(plan);
   group.add(water.mesh);
 
-  // The pedestrian and parking layer sits on top of the colliders, so a kerbside space
-  // is never placed inside a lamp post, a palm or a wall.
+  // The pedestrian and parking layer sits on top of the colliders, so a kerbside space is
+  // never placed inside a lamp post, a palm or a wall.
   onStage('marking the pavements');
   const walk = createWalkNetwork(plan, colliders);
 
-  // Every material with a lit-window emissive map, so dusk can turn them up together.
+  // Every material with a lit-window emissive map, so dusk can turn them up together. The
+  // buildings own theirs; the landmarks only contribute the glass they share.
   const windowMaterials = [...buildings.materials];
   for (const material of Object.values(landmarks.materials)) {
     if (material.emissiveMap) windowMaterials.push(material);
   }
 
   // ---------------------------------------------------------------- minimap data
+  const landmarkBlock = (key) => plan.blocks.find((block) => block.id === plan.landmarkBlocks[key]);
+  const tower = landmarkBlock('tower');
+  const stadium = landmarkBlock('stadium');
   const minimap = {
     bounds: { ...LAND_BOUNDS },
     water: [
@@ -84,7 +99,14 @@ export function createWorld(options = {}) {
       { x0: -1300, z0: WATER.seaSouthZ, x1: 1400, z1: 1000, kind: 'sea' },
       { x0: WATER.channelX0, z0: WATER.channelZ0, x1: WATER.channelX1, z1: WATER.seaSouthZ, kind: 'channel' },
     ],
-    roads: plan.edges.map((edge) => ({ x0: edge.ax, z0: edge.az, x1: edge.bx, z1: edge.bz, width: edge.width, bridge: edge.bridge })),
+    roads: plan.edges.map((edge) => ({
+      x0: edge.ax,
+      z0: edge.az,
+      x1: edge.bx,
+      z1: edge.bz,
+      width: edge.width,
+      bridge: edge.bridge,
+    })),
     blocks: plan.blocks.map((block) => ({
       x0: block.x0,
       z0: block.z0,
@@ -93,11 +115,17 @@ export function createWorld(options = {}) {
       district: block.district,
       park: block.park,
     })),
-    bridges: plan.bridges.map((bridge) => ({ x0: bridge.x0, z0: bridge.z - bridge.width / 2, x1: bridge.x1, z1: bridge.z + bridge.width / 2, kind: bridge.kind })),
+    bridges: plan.bridges.map((bridge) => ({
+      x0: bridge.x0,
+      z0: bridge.z - bridge.width / 2,
+      x1: bridge.x1,
+      z1: bridge.z + bridge.width / 2,
+      kind: bridge.kind,
+    })),
     highway: plan.highway.segments.map((segment) => ({ x0: segment.ax, z0: segment.az, x1: segment.bx, z1: segment.bz })),
     landmarks: [
-      { id: 'spire', x: plan.blocks.find((block) => block.id === plan.landmarkBlocks.tower)?.cx ?? 180, z: plan.blocks.find((block) => block.id === plan.landmarkBlocks.tower)?.cz ?? -140, label: 'Solmara Spire' },
-      { id: 'stadium', x: plan.blocks.find((block) => block.id === plan.landmarkBlocks.stadium)?.cx ?? 600, z: plan.blocks.find((block) => block.id === plan.landmarkBlocks.stadium)?.cz ?? 300, label: 'Verano Arena' },
+      { id: 'spire', x: tower?.cx ?? 180, z: tower?.cz ?? -140, label: 'Solmara Spire' },
+      { id: 'stadium', x: stadium?.cx ?? 600, z: stadium?.cz ?? 300, label: 'Verano Arena' },
       { id: 'pier', x: 930, z: 470, label: 'Pier 9' },
       { id: 'cranes', x: -600, z: 560, label: 'Harbour Works' },
       { id: 'airstrip', x: -660, z: -780, label: 'Marsh Airstrip' },
@@ -111,13 +139,13 @@ export function createWorld(options = {}) {
 
   function update(dt, context = {}) {
     elapsed += dt;
-    const palette = context.palette;
+    const { palette } = context;
     if (palette) {
       night = palette.night ?? 0;
       for (const material of windowMaterials) {
+        // Curtain walls read as one sheet of light, punched windows need less.
         const glass = material.name?.includes('glass');
-        const intensity = night * (glass ? 1.35 : 0.9);
-        material.emissiveIntensity = intensity;
+        material.emissiveIntensity = night * (glass ? 1.35 : 0.9);
       }
     }
     water.update(dt, palette, context.weather);
@@ -139,13 +167,19 @@ export function createWorld(options = {}) {
     colliders: colliders.boxes.length,
     parkingSpots: walk.parking.length,
     crossings: walk.stats.crossings,
-    triangles: terrain.triangles + roads.triangles + buildings.triangles + landmarks.triangles + highway.triangles + props.triangles,
+    triangles:
+      terrain.triangles +
+      roads.triangles +
+      buildings.triangles +
+      landmarks.triangles +
+      highway.triangles +
+      props.triangles,
     textures: textures.list().length,
     buildMs: Math.round(performance.now() - started),
   };
 
-  // The play-state the HUD (and the mission session after it) reads. Systems write it,
-  // nothing here simulates anything: one shared shape, no imports back up the stack.
+  // The play state the HUD and the systems read. They write it, nothing here simulates:
+  // one shared shape, and no imports back up the stack.
   const state = {
     mode: 'foot',
     vehicle: null,

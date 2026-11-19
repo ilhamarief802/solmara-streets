@@ -32,6 +32,7 @@ class Soup {
     nz /= length;
     this.positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
     this.normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+    // Per-vertex colour, so one vertexColors material can paint a whole fleet.
     this.colors.push(color.r, color.g, color.b, color.r, color.g, color.b, color.r, color.g, color.b);
     this.triangles += 1;
   }
@@ -46,34 +47,30 @@ class Soup {
     const w = width / 2;
     const h = height / 2;
     const d = depth / 2;
-    const y0 = cy - h;
-    const y1 = cy + h;
     const x0 = cx - w;
     const x1 = cx + w;
+    const y0 = cy - h;
+    const y1 = cy + h;
     const z0 = cz - d;
     const z1 = cz + d;
-    if (options.topW || options.topD) {
+
+    if (options.topW !== undefined || options.topD !== undefined) {
+      // A frustum: the base rectangle and a shifted, narrower top one.
       const tw = (options.topW ?? width) / 2;
       const td = (options.topD ?? depth) / 2;
-      const shiftX = options.shiftX ?? 0;
-      const shiftZ = options.shiftZ ?? 0;
-      const b = [
-        [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1],
-      ];
-      const t = [
-        [cx + shiftX - tw, y1, cz + shiftZ - td],
-        [cx + shiftX + tw, y1, cz + shiftZ - td],
-        [cx + shiftX + tw, y1, cz + shiftZ + td],
-        [cx + shiftX - tw, y1, cz + shiftZ + td],
-      ];
-      this.quad(t[3], t[2], t[1], t[0], color);
-      this.quad(b[0], b[1], b[2], b[3], color);
+      const sx = cx + (options.shiftX ?? 0);
+      const sz = cz + (options.shiftZ ?? 0);
+      const base = [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]];
+      const top = [[sx - tw, y1, sz - td], [sx + tw, y1, sz - td], [sx + tw, y1, sz + td], [sx - tw, y1, sz + td]];
+      this.quad(top[3], top[2], top[1], top[0], color);
+      this.quad(base[0], base[1], base[2], base[3], color);
       for (let i = 0; i < 4; i += 1) {
         const j = (i + 1) % 4;
-        this.quad(b[i], b[j], t[j], t[i], color);
+        this.quad(base[i], base[j], top[j], top[i], color);
       }
       return;
     }
+
     this.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], color);
     this.quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], color);
     this.quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], color);
@@ -85,27 +82,22 @@ class Soup {
   /** A wheel: an octagonal drum on the X axis, standing on the ground at cy = radius. */
   wheel(cx, cy, cz, radius, width, color, hubColor) {
     const segments = 8;
-    const hw = width / 2;
-    const points = [];
+    const half = width / 2;
+    const rim = [];
     for (let i = 0; i < segments; i += 1) {
       const angle = (i / segments) * Math.PI * 2;
-      points.push([cy + Math.cos(angle) * radius, cz + Math.sin(angle) * radius]);
+      rim.push([cy + Math.cos(angle) * radius, cz + Math.sin(angle) * radius]);
     }
     for (let i = 0; i < segments; i += 1) {
-      const p0 = points[i];
-      const p1 = points[(i + 1) % segments];
-      this.quad(
-        [cx - hw, p0[0], p0[1]],
-        [cx - hw, p1[0], p1[1]],
-        [cx + hw, p1[0], p1[1]],
-        [cx + hw, p0[0], p0[1]],
-        color,
-      );
-      this.triangle([cx - hw, cy, cz], [cx - hw, p0[0], p0[1]], [cx - hw, p1[0], p1[1]], color);
-      this.triangle([cx + hw, cy, cz], [cx + hw, p1[0], p1[1]], [cx + hw, p0[0], p0[1]], color);
+      const p0 = rim[i];
+      const p1 = rim[(i + 1) % segments];
+      this.quad([cx - half, p0[0], p0[1]], [cx - half, p1[0], p1[1]], [cx + half, p1[0], p1[1]], [cx + half, p0[0], p0[1]], color);
+      // The two octagonal end caps.
+      this.triangle([cx - half, cy, cz], [cx - half, p0[0], p0[1]], [cx - half, p1[0], p1[1]], color);
+      this.triangle([cx + half, cy, cz], [cx + half, p1[0], p1[1]], [cx + half, p0[0], p0[1]], color);
     }
     // A pale hub on the outside face, so a wheel reads as a wheel at distance.
-    this.box(cx + hw * 0.55, cy, cz, width * 0.12, radius * 0.75, radius * 0.75, hubColor);
+    this.box(cx + half * 0.55, cy, cz, width * 0.12, radius * 0.75, radius * 0.75, hubColor);
   }
 
   build() {
@@ -149,6 +141,8 @@ function cabin(soup, y, z, width, height, depth, options = {}) {
   const shiftZ = options.shiftZ ?? 0;
   soup.box(0, y + height / 2, z, width, height, depth, color(GLASS), { topW, topD, shiftZ });
   soup.box(0, y + height + 0.045, z + shiftZ * 0.9, topW + 0.04, 0.09, topD + 0.05, WHITE);
+
+  // Four thin pillars at the corners, in body colour.
   const halfW = width / 2 - 0.04;
   const halfD = depth / 2 - 0.04;
   for (const sx of [-1, 1]) {
@@ -158,16 +152,15 @@ function cabin(soup, y, z, width, height, depth, options = {}) {
   }
 }
 
+/** Head and tail lamps, the dark bumper strips, and a plate light at the front. */
 function lamps(soup, dims, options = {}) {
   const zFront = dims.length / 2 - 0.03;
   const zBack = -dims.length / 2 + 0.03;
   const y = options.y ?? 0.66;
-  const width = dims.width - 0.5;
-  soup.box(0, y, zFront, width, 0.13, 0.06, color(HEADLIGHT));
-  soup.box(0, y, zBack, width * 0.94, 0.12, 0.06, color(TAILLIGHT));
+  soup.box(0, y, zFront, dims.width - 0.5, 0.13, 0.06, color(HEADLIGHT));
+  soup.box(0, y, zBack, (dims.width - 0.5) * 0.94, 0.12, 0.06, color(TAILLIGHT));
   soup.box(0, y - 0.15, zFront, dims.width - 0.25, 0.16, 0.07, color(DARK));
   soup.box(0, y - 0.12, zBack, dims.width - 0.2, 0.14, 0.07, color(DARK));
-  // Plate light, one on each end.
   soup.box(0, y - 0.24, zFront + 0.01, 0.34, 0.1, 0.03, color(CHROME));
 }
 
@@ -201,6 +194,7 @@ function coupe() {
   soup.box(0, 0.78, 1.32, 1.76, 0.14, 1.7, WHITE);
   soup.box(0, 0.78, -1.62, 1.72, 0.14, 1.1, WHITE);
   cabin(soup, 0.86, -0.42, 1.62, 0.42, 1.95, { topD: 0.62, shiftZ: -0.16 });
+  // A ducktail spoiler on the boot.
   soup.box(0, 1.14, -1.52, 1.5, 0.09, 0.42, WHITE);
   soup.box(0, 1.05, 0.1, 1.45, 0.26, 1.5, color(0x1d2126));
   mirrors(soup, dims.width, 0.9, 0.55);
@@ -214,6 +208,7 @@ function van() {
   soup.box(0, 1.0, -0.2, 2.0, 1.46, 4.6, WHITE);
   soup.box(0, 0.3, 0, 1.78, 0.14, 4.5, color(DARK));
   soup.box(0, 1.34, 2.05, 1.9, 0.72, 0.9, WHITE, { topW: 1.75, topD: 0.6, shiftZ: -0.2 });
+  // Windscreen, then the two side windows.
   soup.box(0, 1.3, 2.52, 1.76, 0.5, 0.08, color(GLASS));
   for (const sx of [-1, 1]) {
     soup.box(sx * 0.99, 1.44, 0.75, 0.06, 0.46, 1.5, color(GLASS));
@@ -223,6 +218,16 @@ function van() {
   mirrors(soup, dims.width, 1.5, 1.9);
   lamps(soup, dims, { y: 0.72 });
   return { soup, dims };
+}
+
+/** The checker band along a taxi's flanks. */
+function taxiCheckers(soup, width, y) {
+  for (let i = 0; i < 9; i += 1) {
+    const z = -1.5 + i * 0.36;
+    for (const sx of [-1, 1]) {
+      soup.box(sx * (width / 2 + 0.005), y, z, 0.03, 0.12, 0.18, color(i % 2 === 0 ? 0x14161a : 0xf1ead8));
+    }
+  }
 }
 
 function taxi() {
@@ -235,22 +240,12 @@ function taxi() {
   taxiCheckers(soup, dims.width, 0.62);
   cabin(soup, 0.97, -0.08, 1.68, 0.5, 2.2);
   soup.box(0, 1.02, 0, 1.5, 0.34, 1.9, color(0x22262b));
+  // The roof sign: a pale box with a dark face.
   soup.box(0, 1.5, -0.1, 0.76, 0.28, 0.4, color(0xf4ecd8));
   soup.box(0, 1.5, -0.1, 0.5, 0.14, 0.42, color(0x1b1b1b));
   mirrors(soup, dims.width, 1.02, 0.85);
   lamps(soup, dims);
   return { soup, dims };
-}
-
-/** The checker band along a taxi's flanks. */
-function taxiCheckers(soup, width, y) {
-  const squares = 9;
-  for (let i = 0; i < squares; i += 1) {
-    const z = -1.5 + i * 0.36;
-    for (const sx of [-1, 1]) {
-      soup.box(sx * (width / 2 + 0.005), y, z, 0.03, 0.12, 0.18, color(i % 2 === 0 ? 0x14161a : 0xf1ead8));
-    }
-  }
 }
 
 function police() {
@@ -260,17 +255,21 @@ function police() {
   soup.box(0, 0.3, 0, 1.78, 0.14, 4.65, color(DARK));
   soup.box(0, 0.88, 1.35, 1.82, 0.16, 1.85, color(0x131619));
   soup.box(0, 0.88, -1.6, 1.8, 0.16, 1.35, WHITE);
+
+  // Door decals and the push bars.
   for (const sx of [-1, 1]) {
     soup.box(sx * 0.965, 0.62, 0.55, 0.04, 0.44, 1.1, color(0x16191d));
     soup.box(sx * 0.965, 0.62, -0.95, 0.04, 0.44, 0.9, color(0x16191d));
     soup.box(sx * 0.84, 0.7, 1.1, 0.2, 0.26, 1.6, WHITE);
   }
+
   cabin(soup, 0.98, -0.1, 1.74, 0.48, 2.4);
   soup.box(0, 1.02, 0, 1.56, 0.34, 2.05, color(0x22262b));
-  // The bar: red on the left, blue on the right, a dark base under it.
+
+  // The light bar: red on the left, blue on the right, a dark base under it.
   soup.box(0, 1.5, -0.12, 1.2, 0.1, 0.34, color(DARK));
-  soup.box(-0.30, 1.59, -0.12, 0.52, 0.13, 0.3, color(0xd02a2a));
-  soup.box(0.30, 1.59, -0.12, 0.52, 0.13, 0.3, color(0x2a5ad0));
+  soup.box(-0.3, 1.59, -0.12, 0.52, 0.13, 0.3, color(0xd02a2a));
+  soup.box(0.3, 1.59, -0.12, 0.52, 0.13, 0.3, color(0x2a5ad0));
   soup.box(0, 0.66, 2.42, 1.2, 0.24, 0.12, color(DARK));
   for (const sx of [-1, 1]) {
     soup.box(sx * 0.55, 0.46, 2.44, 0.08, 0.5, 0.1, color(DARK));
@@ -286,12 +285,14 @@ function buggy() {
   soup.box(0, 0.4, 0, 1.5, 0.16, 3.1, WHITE);
   soup.box(0, 0.62, 1.28, 1.36, 0.3, 0.98, WHITE, { topW: 1.1, topD: 0.8 });
   soup.box(0, 0.56, -1.32, 1.3, 0.24, 0.6, WHITE);
-  // Open cockpit: two seats and a dash.
+
+  // Open cockpit: two seats, a dash and a low screen.
   soup.box(0, 0.62, -0.15, 1.24, 0.26, 1.15, color(0x2a2f34));
   soup.box(-0.3, 0.78, -0.52, 0.44, 0.42, 0.16, color(0xb8a27c));
   soup.box(0.3, 0.78, -0.52, 0.44, 0.42, 0.16, color(0xb8a27c));
   soup.box(0, 0.7, 0.42, 1.14, 0.16, 0.16, color(0x22262b));
   soup.box(0, 0.86, 0.42, 0.9, 0.4, 0.05, color(GLASS));
+
   // Roll bar: two legs and a cross tube.
   for (const sx of [-1, 1]) {
     soup.box(sx * 0.58, 1.05, -0.62, 0.09, 1.2, 0.09, WHITE);
@@ -330,58 +331,60 @@ export const CAR_TYPES = Object.keys(BUILDERS);
 export { TYPE_PAINT };
 
 /**
+ * Splits a body soup into a painted shell and baked-colour details. The builders write
+ * body panels as pure white, so one colour test separates them.
+ */
+function splitShell(soup) {
+  const shell = new Soup();
+  const details = new Soup();
+  for (let i = 0; i < soup.positions.length; i += 9) {
+    const isWhite = soup.colors[i] > 0.99 && soup.colors[i + 1] > 0.99 && soup.colors[i + 2] > 0.99;
+    const target = isWhite ? shell : details;
+    for (let vertex = 0; vertex < 9; vertex += 1) {
+      const offset = i + vertex;
+      target.positions.push(soup.positions[offset]);
+      target.normals.push(soup.normals[offset]);
+      target.colors.push(soup.colors[offset]);
+    }
+    target.triangles += 1;
+  }
+  return { shell, details };
+}
+
+/**
  * Builds and caches the geometries for one body type.
  * @returns {{type, dims, shell, details, wheels, wheelGeometry, wheelOffsets}}
  */
 export function getCarModel(type) {
   const key = BUILDERS[type] ? type : 'sedan';
   if (cache.has(key)) return cache.get(key);
-  const built = BUILDERS[key]();
-  const { soup, dims } = built;
+  const { soup, dims } = BUILDERS[key]();
+  const { shell, details } = splitShell(soup);
 
-  // The shell: white panels, painted by material or instance colour.
-  const shellSoup = new Soup();
-  // Separate the details: the model builder already writes body-colour parts white and
-  // the rest with real colours, so split by colour while copying triangles.
-  const detailSoup = new Soup();
-  const wheelSoup = new Soup();
+  // One wheel at the origin, for the player's car to spin, plus the static set for the
+  // fleet and the parked cars.
   const wheelGeometry = new Soup();
-  for (let i = 0; i < soup.positions.length; i += 9) {
-    const isWhite =
-      soup.colors[i] > 0.99 && soup.colors[i + 1] > 0.99 && soup.colors[i + 2] > 0.99;
-    const target = isWhite ? shellSoup : detailSoup;
-    for (let vertex = 0; vertex < 3; vertex += 1) {
-      const offset = i + vertex * 3;
-      target.positions.push(soup.positions[offset], soup.positions[offset + 1], soup.positions[offset + 2]);
-      target.normals.push(soup.normals[offset], soup.normals[offset + 1], soup.normals[offset + 2]);
-      target.colors.push(soup.colors[offset], soup.colors[offset + 1], soup.colors[offset + 2]);
-    }
-    target.triangles += 1;
-  }
-
-  // One wheel at the origin, for the player's car to spin.
   wheelGeometry.wheel(0, dims.wheelRadius, 0, dims.wheelRadius, 0.28, color(DARK), color(HUB));
+
+  const wheels = new Soup();
   const wheelOffsets = [];
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       const offset = { x: (sx * dims.track) / 2, y: dims.wheelRadius, z: (sz * dims.wheelbase) / 2 };
       wheelOffsets.push(offset);
-      wheelSoup.wheel(offset.x, offset.y, offset.z, dims.wheelRadius, 0.28, color(DARK), color(HUB));
+      wheels.wheel(offset.x, offset.y, offset.z, dims.wheelRadius, 0.28, color(DARK), color(HUB));
     }
   }
 
-  const shell = shellSoup.build();
-  const details = detailSoup.build();
-  const wheels = wheelSoup.build();
   const model = {
     type: key,
     dims,
-    shell,
-    details,
-    wheels,
+    shell: shell.build(),
+    details: details.build(),
+    wheels: wheels.build(),
     wheelGeometry: wheelGeometry.build(),
     wheelOffsets,
-    triangles: shellSoup.triangles + detailSoup.triangles + wheelSoup.triangles,
+    triangles: shell.triangles + details.triangles + wheels.triangles,
     radius: Math.max(dims.width, dims.length) * 0.32,
   };
   cache.set(key, model);
@@ -406,8 +409,7 @@ export function buildCarGroup(type, paint = 0xb8bcc0) {
   const shell = new THREE.Mesh(model.shell, paintMaterial);
   group.add(shell);
 
-  const detailMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
-  const details = new THREE.Mesh(model.details, detailMaterial);
+  const details = new THREE.Mesh(model.details, new THREE.MeshLambertMaterial({ vertexColors: true }));
   group.add(details);
 
   const wheelMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });

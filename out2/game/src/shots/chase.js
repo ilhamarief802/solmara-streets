@@ -5,6 +5,13 @@
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 
+/** Where each cruiser sits behind the player's car: [m back, m to the right]. */
+const FORMATION = [
+  [7.4, -1.2],
+  [15.5, 1.6],
+  [27, -0.6],
+];
+
 export default {
   id: 'chase',
   short: 'Solmara Streets — chase',
@@ -34,23 +41,26 @@ export default {
     const police = game.police;
     police.clearWanted('shot');
     police.staged = true;
-    const spawnAt = (back, side) =>
+
+    // Any cruiser an earlier scenario left behind is removed before the formation is set.
+    for (const cruiser of police.cruisers) game.scene.remove(cruiser.view?.group);
+    police.cruisers.length = 0;
+
+    const fx = Math.sin(car.heading);
+    const fz = Math.cos(car.heading);
+    const rx = Math.cos(car.heading);
+    const rz = -Math.sin(car.heading);
+    this.cruisers = FORMATION.map(([back, side]) =>
       police.spawnCruiser(null, {
         mode: 'chase',
-        x: car.x - Math.sin(car.heading) * back + Math.cos(car.heading) * side,
-        z: car.z - Math.cos(car.heading) * back - Math.sin(car.heading) * side,
+        x: car.x - fx * back + rx * side,
+        z: car.z - fz * back + rz * side,
         heading: car.heading,
-      });
-    if (police.cruisers.length) {
-      for (const cruiser of police.cruisers.slice()) {
-        game.scene.remove(cruiser.view?.group);
-      }
-      police.cruisers.length = 0;
-    }
-    this.near = spawnAt(7.4, -1.2);
-    this.mid = spawnAt(15.5, 1.6);
-    this.far = spawnAt(27, -0.6);
+      }),
+    );
+
     police.setWanted(3, 'shot');
+    // No reinforcements while the shutter is open.
     police.spawnClock = 999;
 
     game.player.character.rest();
@@ -83,32 +93,37 @@ export default {
   update(ctx, elapsed) {
     const car = this.car ?? ctx.game.vehicles.activeCar;
     if (!car) return;
+
     const t = easeInOutCubic(clamp01(elapsed / 7));
     const fx = Math.sin(car.heading);
     const fz = Math.cos(car.heading);
     const rx = Math.cos(car.heading);
     const rz = -Math.sin(car.heading);
-    const station = (cruiser, distance, side) => {
+
+    // The cruisers are pinned to their stations: a staged shot must not drift apart while
+    // the warm-up runs.
+    FORMATION.forEach(([back, side], index) => {
+      const cruiser = this.cruisers[index];
       if (!cruiser) return;
-      cruiser.x = car.x - fx * distance + rx * side;
-      cruiser.z = car.z - fz * distance + rz * side;
+      cruiser.x = car.x - fx * back + rx * side;
+      cruiser.z = car.z - fz * back + rz * side;
       cruiser.heading = car.heading;
       cruiser.speed = 10.4;
       cruiser.syncView(0.016);
-    };
-    station(this.near, 7.4, -1.2);
-    station(this.mid, 15.5, 1.6);
-    station(this.far, 27, -0.6);
+    });
+
     const ahead = this.from.ahead + (this.to.ahead - this.from.ahead) * t;
     const side = this.from.side + (this.to.side - this.from.side) * t;
     const up = this.from.up + (this.to.up - this.from.up) * t;
     const lookBack = this.from.lookBack + (this.to.lookBack - this.from.lookBack) * t;
     const bob = Math.sin(elapsed * 2.8) * 0.03;
+
     ctx.camera.position.set(
       car.x + fx * ahead + rx * side,
       car.y + up + bob,
       car.z + fz * ahead + rz * side,
     );
+    // Looking back down the boulevard: the car first, the cruisers stacked behind it.
     ctx.camera.lookAt(car.x + fx * lookBack, car.y + 0.95, car.z + fz * lookBack);
   },
 };

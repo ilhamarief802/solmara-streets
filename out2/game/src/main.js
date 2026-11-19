@@ -1,8 +1,8 @@
-// Solmara Streets: the entry module. Reads the URL settings, installs the one error
-// overlay before anything else can fail, builds the renderer, sky and city, puts the
-// player on the Avenida Sol with a third-person camera, starts the fixed-step loop and
-// exposes window.__GAME for inspection and for the shot rig. Traffic, pedestrians and
-// the kerbside cars are all seeded from the same world seed, so a reload is a replay.
+// Solmara Streets: the entry module. Reads the URL settings, installs the one error overlay
+// before anything else can fail, builds the renderer, sky and city, puts the player on the
+// Avenida Sol with a third-person camera, starts the fixed-step loop and exposes
+// window.__GAME for inspection and for the shot rig. Traffic, pedestrians and the kerbside
+// cars are all seeded from the same world seed, so a reload is a replay.
 
 import { settings } from './core/settings.js';
 import { installErrorOverlay, PerfOverlay, bootStatus, hideBootCard } from './core/debug.js';
@@ -29,6 +29,13 @@ import { createAudio } from './audio/audio.js';
 import { createMenus } from './menus/menu.js';
 import { applySettings, loadSave, snapshotGame, writeSave } from './state/save.js';
 
+/** How often the HUD is refreshed, in seconds. */
+const HUD_INTERVAL = 1 / 6;
+/** How often an autosave is written while playing, in seconds. */
+const AUTOSAVE_INTERVAL = 10;
+/** Night for the page's own ink, in hours. */
+const NIGHT = { from: 19.6, to: 6.4 };
+
 // A save written by an earlier run shapes the boot: settings first (the renderer reads
 // them at construction), then the story is restored later, after the systems exist.
 const bootSave = loadSave();
@@ -43,15 +50,11 @@ bootStatus('Waking Solmara…');
 const canvas = document.getElementById('viewport');
 const renderer = createRenderer(canvas, settings);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(
-  settings.fov,
-  window.innerWidth / window.innerHeight,
-  0.35,
-  settings.drawDistance,
-);
+const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.35, settings.drawDistance);
 camera.rotation.order = 'YXZ';
 renderer.userData.camera = camera;
 
+// Noon fog until the first palette arrives; the clock drives it from the second frame on.
 scene.fog = new THREE.FogExp2(0xc4d2dc, 0.00065);
 
 const clock = new GameClock({ startHour: 17.1 });
@@ -65,6 +68,7 @@ try {
     seed: settings.seed,
     renderer,
     settings,
+    // A software rasteriser gets the cheap pass unless a shot needs the detail.
     lite: renderer.userData.software && !settings.shot,
     onStage: (stage) => bootStatus(`${stage[0].toUpperCase()}${stage.slice(1)}…`),
   });
@@ -79,14 +83,10 @@ const loop = new GameLoop({ fixedStep: 1 / 60 });
 const perf = new PerfOverlay(document.getElementById('perf'), renderer);
 
 // ---------------------------------------------------------------- the player
-// Spawn on the pavement of the Avenida Sol, a few steps from the downtown junction:
-// road and traffic to the east, towers to the west, a coupe parked at the kerb.
+// Spawn on the pavement of the Avenida Sol, a few steps from the downtown junction: road
+// and traffic to the east, towers to the west, a coupe parked at the kerb.
 const spawn = world.spawnById('downtown-boulevard') ?? { x: 340, z: 80, heading: 0 };
-const player = new Player({
-  world,
-  scene,
-  spawn: { x: spawn.x - 10.8, z: spawn.z - 20, heading: 0 },
-});
+const player = new Player({ world, scene, spawn: { x: spawn.x - 10.8, z: spawn.z - 20, heading: 0 } });
 
 const vehicles = new VehicleSystem({ world, scene, player, seed: world.seed });
 const traffic = new TrafficSystem({ world, seed: world.seed, player, vehicles, count: settings.trafficCount });
@@ -101,6 +101,7 @@ const pedestrians = new PedestrianSystem({
   count: settings.pedestrianCount,
 });
 player.vehicles = vehicles;
+
 const rain = createRain(scene, { seed: 11 });
 rain.setWeather(weather.current.id);
 
@@ -112,18 +113,9 @@ cameraRig.anchor.z = player.position.z;
 
 const hud = createHud(world);
 
-// The fighting layer, the police response and the story, in that order: each one hands
-// the next its public surface, and all four talk through the bus.
-const combat = new Combat({
-  scene,
-  camera,
-  world,
-  player,
-  pedestrians,
-  vehicles,
-  cameraRig,
-  hud,
-});
+// The fighting layer, the police response and the story, in that order: each one hands the
+// next its public surface, and all of them talk through the bus.
+const combat = new Combat({ scene, camera, world, player, pedestrians, vehicles, cameraRig, hud });
 const police = new PoliceSystem({
   world,
   scene,
@@ -137,16 +129,7 @@ const police = new PoliceSystem({
   seed: world.seed,
 });
 combat.setPolice(police);
-const missions = new MissionSystem({
-  world,
-  scene,
-  player,
-  vehicles,
-  police,
-  combat,
-  hud,
-  seed: world.seed,
-});
+const missions = new MissionSystem({ world, scene, player, vehicles, police, combat, hud, seed: world.seed });
 combat.resolveDown = () => (police.isBustedNearby() ? 'busted' : 'wasted');
 combat.effects.setCamera(camera);
 
@@ -207,7 +190,10 @@ const audio = createAudio({ settings, bus });
 game.audio = audio;
 const menus = createMenus({ game, settings, audio, perf, onSaved: () => {} });
 game.menus = menus;
-game.save = { snapshot: () => snapshotGame(game), write: (extra) => writeSave({ ...snapshotGame(game), ...extra }) };
+game.save = {
+  snapshot: () => snapshotGame(game),
+  write: (extra) => writeSave({ ...snapshotGame(game), ...extra }),
+};
 
 // The persisted knobs that are not renderer construction: shadow maps, post layer, input
 // speed and the frame readout.
@@ -235,21 +221,26 @@ let hudClock = 0;
 let saveClock = 0;
 let lastPrompt = '';
 
-/** The HUD is read from the same state everything else writes, at most six times a second. */
-function refreshHud() {
-  const missionPrompt = missions.prompt();
-  const prompt = missionPrompt || vehicles.prompt();
+/** The one prompt line: the mission's wins over the car's, and it is written once. */
+function currentPrompt() {
+  const prompt = missions.prompt() || vehicles.prompt();
   if (prompt !== lastPrompt) {
     lastPrompt = prompt;
     world.state.prompt = prompt;
   }
+  return prompt;
+}
+
+/** The HUD is read from the same state everything else writes, six times a second. */
+function refreshHud() {
+  const driving = Boolean(vehicles.activeCar);
   hud.update({
     districtName: world.districts[world.state.district]?.name ?? 'Solmara',
     hour: clock.hour,
-    mode: vehicles.activeCar ? 'driving' : 'foot',
+    mode: driving ? 'driving' : 'foot',
     vehicle: vehicles.activeCar?.name,
     speed: Math.abs(vehicles.activeCar?.speed ?? 0) * 3.6,
-    prompt,
+    prompt: currentPrompt(),
     money: missions.money,
     health: combat.health,
     armour: combat.armour,
@@ -259,6 +250,9 @@ function refreshHud() {
     down: combat.downKind,
     firing: combat.firingNow,
   });
+
+  // Mirror the same numbers into the world's shared play state, for the systems that
+  // cannot import the HUD's inputs.
   world.state.money = missions.money;
   world.state.health = Math.round(combat.health);
   world.state.armour = Math.round(combat.armour);
@@ -267,17 +261,53 @@ function refreshHud() {
   world.state.weapon = combat.weaponId;
 }
 
+/** Steps whatever the player asked for this frame: car, camera, shop, trigger. */
+function handlePlayerActions() {
+  if (shots.active || menus.screen) return;
+
+  // The shop owns the number keys while it is open; no shooting through the menu.
+  if (missions.shopOpen) {
+    combat.suspended = true;
+    if (input.keyPressed('Digit1')) missions.buy(1);
+    if (input.keyPressed('Digit2')) missions.buy(2);
+    if (input.keyPressed('Digit3')) missions.buy(3);
+    if (input.keyPressed('Digit4')) missions.buy(4);
+    if (input.keyPressed('Escape') || input.keyPressed('KeyE')) missions.closeShop();
+    return;
+  }
+
+  combat.suspended = false;
+  combat.handleInput(input);
+
+  if (input.keyPressed('KeyE') && missions.interact()) return;
+  // E and F both reach for the nearest car; F is the one the HUD names.
+  if (input.keyPressed('KeyE') || input.keyPressed('KeyF')) enterOrLeaveCar();
+  if (input.keyPressed('KeyV')) {
+    cameraRig.toggleMode();
+    bus.emit('camera:mode', { firstPerson: cameraRig.firstPerson });
+  }
+}
+
+function enterOrLeaveCar() {
+  const stolen = vehicles.tryEnter(player);
+  if (player.car) cameraRig.timeSinceLook = 0;
+  if (stolen) police.onCarjack(player.position.x, player.position.z);
+  refreshHud();
+  bus.emit('game:interact', { driving: Boolean(player.car), stolen });
+}
+
 function onUpdate(dt) {
   if (loop.paused) return;
+
   clock.update(dt);
   weather.update(dt);
   const palette = clock.palette();
   world.update(dt, { palette, weather, camera });
 
-  // Order matters: the driven car moves, then the body follows (or walks), then the
-  // actors that react to both, then fighting, the response and the story, then the
-  // instanced fleet is rebuilt from the result. While the player is down the body and
-  // car are left where they fell; everything else keeps living.
+  // Order matters: the driven car moves, then the body follows (or walks), then the actors
+  // that react to both, then fighting, the response and the story, then the instanced fleet
+  // is rebuilt from the result. While the player is down the body and car are left where
+  // they fell; everything else keeps living.
   if (!combat.isDown) {
     vehicles.update(dt, input);
     player.update(dt, { input, cameraYaw: cameraRig.yaw });
@@ -289,10 +319,12 @@ function onUpdate(dt) {
   missions.update(dt);
   vehicles.paint();
 
-  world.state.district = world.districtAt(player.position.x, player.position.z);
+  const { x, z } = player.position;
+  world.state.district = world.districtAt(x, z);
   world.state.hour = clock.hour;
-  world.state.nearbyTraffic = traffic.cars.filter((car) => Math.hypot(car.x - player.position.x, car.z - player.position.z) < 90).length;
-  world.state.nearbyPeds = pedestrians.peds.filter((ped) => Math.hypot(ped.x - player.position.x, ped.z - player.position.z) < 60).length;
+  world.state.nearbyTraffic = traffic.cars.filter((car) => Math.hypot(car.x - x, car.z - z) < 90).length;
+  world.state.nearbyPeds = pedestrians.peds.filter((ped) => Math.hypot(ped.x - x, ped.z - z) < 60).length;
+
   rain.setWeather(weather.current.id);
   rain.update(dt, camera);
   sky.update(dt, camera);
@@ -300,7 +332,7 @@ function onUpdate(dt) {
   // A quiet autosave while playing. Shots never write: their posed world is not a save.
   if (!shots.active && !menus.screen) {
     saveClock += dt;
-    if (saveClock >= 10) {
+    if (saveClock >= AUTOSAVE_INTERVAL) {
       saveClock = 0;
       writeSave(snapshotGame(game));
     }
@@ -318,40 +350,7 @@ function onRender(frameSeconds) {
     clock.advance(1);
     bus.emit('game:timeskip', { hour: clock.hour });
   }
-  if (!shots.active && !menus.screen) {
-    if (missions.shopOpen) {
-      // The shop owns the number keys while it is open; no shooting through the menu.
-      combat.suspended = true;
-      if (input.keyPressed('Digit1')) missions.buy(1);
-      if (input.keyPressed('Digit2')) missions.buy(2);
-      if (input.keyPressed('Digit3')) missions.buy(3);
-      if (input.keyPressed('Digit4')) missions.buy(4);
-      if (input.keyPressed('Escape') || input.keyPressed('KeyE')) missions.closeShop();
-    } else {
-      combat.suspended = false;
-      combat.handleInput(input);
-      if (input.keyPressed('KeyE')) {
-        if (!missions.interact()) {
-          const stolen = vehicles.tryEnter(player);
-          if (player.car) cameraRig.timeSinceLook = 0;
-          if (stolen) police.onCarjack(player.position.x, player.position.z);
-          refreshHud();
-          bus.emit('game:interact', { driving: Boolean(player.car), stolen });
-        }
-      }
-      if (input.keyPressed('KeyF')) {
-        const stolen = vehicles.tryEnter(player);
-        if (player.car) cameraRig.timeSinceLook = 0;
-        if (stolen) police.onCarjack(player.position.x, player.position.z);
-        refreshHud();
-        bus.emit('game:interact', { driving: Boolean(player.car), stolen });
-      }
-      if (input.keyPressed('KeyV')) {
-        cameraRig.toggleMode();
-        bus.emit('camera:mode', { firstPerson: cameraRig.firstPerson });
-      }
-    }
-  }
+  handlePlayerActions();
 
   const palette = clock.palette();
   scene.fog.color.setRGB(...palette.fogColor);
@@ -359,12 +358,13 @@ function onRender(frameSeconds) {
   setExposure(renderer, palette.exposure * weather.exposureBias * (shots.active ? shots.exposure : 1));
   sky.setPalette(palette, weather);
 
-  // The page itself reacts to the hour and the weather: night HUD ink, the wet tint and
-  // the windscreen streaks all read these classes.
-  const night = clock.hour >= 19.6 || clock.hour < 6.4;
+  // The page itself reacts to the hour and the weather: night HUD ink, the wet tint and the
+  // windscreen streaks all read these classes.
+  const night = clock.hour >= NIGHT.from || clock.hour < NIGHT.to;
   document.body.classList.toggle('is-night', night);
   document.body.classList.toggle('is-rain', rain.isRaining);
   document.body.classList.toggle('is-driving', Boolean(vehicles.activeCar));
+
   menus.update(frameSeconds);
   audio.update(frameSeconds, {
     car: vehicles.activeCar,
@@ -374,17 +374,15 @@ function onRender(frameSeconds) {
     raining: rain.isRaining,
   });
 
-  if (shots.active) {
-    shots.update(frameSeconds);
-  } else {
-    cameraRig.update(Math.min(frameSeconds, 0.1), { car: vehicles.activeCar });
-  }
+  if (shots.active) shots.update(frameSeconds);
+  else cameraRig.update(Math.min(frameSeconds, 0.1), { car: vehicles.activeCar });
 
   hudClock += frameSeconds;
-  if (hudClock >= 1 / 6) {
+  if (hudClock >= HUD_INTERVAL) {
     hudClock = 0;
     refreshHud();
   }
+
   const dots = police.mapDots;
   hud.frame(frameSeconds, {
     x: player.position.x,
@@ -406,8 +404,10 @@ function onRender(frameSeconds) {
     wanted: `${police.wanted} stars · ${police.cruisers.length} cruisers · ${police.cops.length} cops`,
     money: `$${missions.money}`,
   });
+
   renderer.render(scene, camera);
   input.resetFrame();
+
   if (firstFrame) {
     firstFrame = false;
     hideBootCard();
@@ -427,10 +427,12 @@ for (const id of ['post-layer', 'weather-layer']) {
   layer.id = id;
   document.body.append(layer);
 }
+
 const fadeLayer = document.createElement('div');
 fadeLayer.id = 'fade-layer';
 fadeLayer.className = 'is-booting';
 document.body.append(fadeLayer);
+// Two frames, so the first city frame is behind the fade before it lifts.
 requestAnimationFrame(() => {
   requestAnimationFrame(() => {
     fadeLayer.classList.add('is-faded');
@@ -498,10 +500,9 @@ window.__GAME = {
 
 // F3 toggles the frame readout from anywhere, even while paused.
 window.addEventListener('keydown', (event) => {
-  if (event.code === 'F3') {
-    event.preventDefault();
-    perf.toggle();
-  }
+  if (event.code !== 'F3') return;
+  event.preventDefault();
+  perf.toggle();
 });
 
 window.__MENU = menus;

@@ -23,6 +23,7 @@ export default {
       heading: Math.PI / 2,
       speed: 0,
     });
+    // Standing at the kerb with the handbrake on: the lamps stay lit, the wheels stay put.
     car.autopilot = { throttle: 0, steer: 0, handbrake: true };
     this.car = car;
 
@@ -30,7 +31,8 @@ export default {
     game.traffic.placeAhead(206, -697, Math.PI / 2, { distance: 24, count: 3, spacing: 18 });
     game.pedestrians.reset(seed, 206, -697, 34);
 
-    // Put four of the crowd on the two lit pavements, inside the frame the camera sees.
+    // Put four of the crowd on the two lit pavements, inside the frame the camera sees;
+    // they keep walking their rings once placed.
     const stage = (index, x, z, heading) => {
       const ped = game.pedestrians.peds[index];
       if (!ped) return;
@@ -72,7 +74,8 @@ export default {
     });
 
     // The city has no shadow maps, so street level after dark gets a cool ambient fill and
-    // two coloured strips: the signs on the north side and the warm shopfronts opposite.
+    // three coloured lights: the signs on the north side, the warm shopfronts opposite and
+    // one streetlight over the kerb.
     this.fill = new THREE.AmbientLight(0x9fb0cc, 1.7);
     game.scene.add(this.fill);
     this.key = new THREE.PointLight(0xff5fc8, 2.6, 50, 2);
@@ -93,10 +96,11 @@ export default {
   },
   update(ctx, elapsed) {
     const t = easeInOutCubic(clamp01(elapsed / 10));
+    // A short drift down the street rather than a full move: the frame is mostly static.
     const px = this.origin.x + (this.target.x - this.origin.x) * 0.18 * t;
     const pz = this.origin.z + (this.target.z - this.origin.z) * 0.12 * t;
-    const py = this.origin.y - t * 0.12;
-    ctx.camera.position.set(px, py, pz);
+
+    ctx.camera.position.set(px, this.origin.y - t * 0.12, pz);
     ctx.camera.lookAt(this.target.x, this.target.y, this.target.z);
   },
 };

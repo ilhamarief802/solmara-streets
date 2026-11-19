@@ -1,14 +1,18 @@
 // Combat effects, all generated in code and all pooled: muzzle flashes are additive
 // billboards painted once into a canvas texture, tracers are stretched boxes that fade in
 // under a tenth of a second, and impacts are a handful of points thrown out with gravity.
-// There are no decals and no textures on disk, and the pools never grow at run time.
+// There are no decals and no files on disk, and the pools never grow at run time.
 
-const FLASH_TEXTURE = () => {
+const SPARKS_PER_BURST = 14;
+const GRAVITY = 12;
+
+function createFlashTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 64;
   canvas.height = 64;
   const ctx = canvas.getContext('2d');
   if (!ctx) return null;
+
   const centre = 32;
   const glow = ctx.createRadialGradient(centre, centre, 0, centre, centre, 30);
   glow.addColorStop(0, 'rgba(255, 252, 230, 1)');
@@ -17,6 +21,7 @@ const FLASH_TEXTURE = () => {
   glow.addColorStop(1, 'rgba(255, 120, 30, 0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, 64, 64);
+
   // Four short rays, so the flash reads as a star even on a small screen.
   ctx.strokeStyle = 'rgba(255, 236, 190, 0.85)';
   ctx.lineWidth = 2;
@@ -26,10 +31,11 @@ const FLASH_TEXTURE = () => {
     ctx.lineTo(centre + Math.cos(angle) * 30, centre + Math.sin(angle) * 30);
   }
   ctx.stroke();
+
   const texture = new THREE.CanvasTexture(canvas);
   texture.needsUpdate = true;
   return texture;
-};
+}
 
 const _dir = new THREE.Vector3();
 const _origin = new THREE.Vector3();
@@ -39,7 +45,7 @@ export class CombatEffects {
   constructor(scene, camera = null) {
     this.scene = scene;
     this.camera = camera;
-    this.flashTexture = FLASH_TEXTURE();
+    this.flashTexture = createFlashTexture();
     this.flashGeometry = new THREE.PlaneGeometry(1, 1);
     this.boxGeometry = new THREE.BoxGeometry(1, 1, 1);
     this.flashes = [];
@@ -94,7 +100,7 @@ export class CombatEffects {
 
   buildSparks(count) {
     for (let index = 0; index < count; index += 1) {
-      const positions = new Float32Array(14 * 3);
+      const positions = new Float32Array(SPARKS_PER_BURST * 3);
       const geometry = new THREE.BufferGeometry();
       geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
       const material = new THREE.PointsMaterial({
@@ -115,20 +121,26 @@ export class CombatEffects {
         material,
         geometry,
         positions,
-        velocities: new Float32Array(14 * 3),
+        velocities: new Float32Array(SPARKS_PER_BURST * 3),
         life: 0,
         maxLife: 1,
-        count: 14,
       });
     }
   }
 
+  /** A free slot, or the one closest to expiring when the pool is full. */
+  static take(pool) {
+    let oldest = pool[0];
+    for (const entry of pool) {
+      if (entry.life <= 0) return entry;
+      if (entry.life < oldest.life) oldest = entry;
+    }
+    return oldest;
+  }
+
   /** A muzzle flash at a point, billboarded every frame. `life` is seconds. */
   muzzle(x, y, z, { life = 0.07, scale = 0.85, color = 0xffd9a0 } = {}) {
-    let slot = this.flashes.find((entry) => entry.life <= 0);
-    if (!slot) {
-      slot = this.flashes.reduce((best, entry) => (entry.life < best.life ? entry : best), this.flashes[0]);
-    }
+    const slot = CombatEffects.take(this.flashes);
     slot.life = life;
     slot.maxLife = life;
     slot.scale = scale;
@@ -143,10 +155,7 @@ export class CombatEffects {
 
   /** A line of light from the barrel to the hit point (or the weapon's reach). */
   tracer(from, to, { life = 0.055, width = 0.035, color = 0xffd9a0 } = {}) {
-    let slot = this.tracers.find((entry) => entry.life <= 0);
-    if (!slot) {
-      slot = this.tracers.reduce((best, entry) => (entry.life < best.life ? entry : best), this.tracers[0]);
-    }
+    const slot = CombatEffects.take(this.tracers);
     _origin.set(from.x, from.y, from.z);
     _target.set(to.x, to.y, to.z);
     _dir.subVectors(_target, _origin);
@@ -164,30 +173,33 @@ export class CombatEffects {
   }
 
   /** A small burst of points, thrown sideways and up, in a warm dust palette. */
-  impact(x, y, z, { color = 0xffc98a, count = 14, speed = 4.2, life = 0.34, size = 0.16 } = {}) {
-    let slot = this.sparks.find((entry) => entry.life <= 0);
-    if (!slot) {
-      slot = this.sparks.reduce((best, entry) => (entry.life < best.life ? entry : best), this.sparks[0]);
-    }
+  impact(x, y, z, { color = 0xffc98a, count = SPARKS_PER_BURST, speed = 4.2, life = 0.34, size = 0.16 } = {}) {
+    const slot = CombatEffects.take(this.sparks);
     slot.life = life;
     slot.maxLife = life;
-    slot.count = Math.min(count, 14);
     slot.material.color.setHex(color);
     slot.material.size = size;
     slot.material.opacity = 1;
     slot.points.visible = true;
-    const positions = slot.positions;
-    const velocities = slot.velocities;
-    for (let index = 0; index < 14; index += 1) {
+
+    const used = Math.min(count, SPARKS_PER_BURST);
+    const { positions, velocities } = slot;
+    for (let index = 0; index < SPARKS_PER_BURST; index += 1) {
       const offset = index * 3;
       positions[offset] = x;
       positions[offset + 1] = y;
       positions[offset + 2] = z;
+      // Unused points sit exactly on the origin of the burst and are never moved.
+      if (index >= used) {
+        velocities[offset] = 0;
+        velocities[offset + 1] = 0;
+        velocities[offset + 2] = 0;
+        continue;
+      }
       const theta = Math.random() * Math.PI * 2;
-      const lift = 0.4 + Math.random() * 1.6;
       const spread = speed * (0.45 + Math.random());
       velocities[offset] = Math.cos(theta) * spread;
-      velocities[offset + 1] = lift;
+      velocities[offset + 1] = 0.4 + Math.random() * 1.6;
       velocities[offset + 2] = Math.sin(theta) * spread;
     }
     slot.geometry.attributes.position.needsUpdate = true;
@@ -199,28 +211,26 @@ export class CombatEffects {
     for (const flash of this.flashes) {
       if (flash.life <= 0) continue;
       flash.life -= dt;
-      const t = Math.max(0, flash.life / flash.maxLife);
-      flash.material.opacity = t;
+      flash.material.opacity = Math.max(0, flash.life / flash.maxLife);
       if (this.camera) flash.mesh.quaternion.copy(this.camera.quaternion);
       if (flash.life <= 0) flash.mesh.visible = false;
     }
+
     for (const tracer of this.tracers) {
       if (tracer.life <= 0) continue;
       tracer.life -= dt;
-      const t = Math.max(0, tracer.life / tracer.maxLife);
-      tracer.material.opacity = t * 0.9;
+      tracer.material.opacity = Math.max(0, tracer.life / tracer.maxLife) * 0.9;
       if (tracer.life <= 0) tracer.mesh.visible = false;
     }
+
     for (const spark of this.sparks) {
       if (spark.life <= 0) continue;
       spark.life -= dt;
-      const t = Math.max(0, spark.life / spark.maxLife);
-      spark.material.opacity = t;
-      const positions = spark.positions;
-      const velocities = spark.velocities;
-      for (let index = 0; index < 14; index += 1) {
+      spark.material.opacity = Math.max(0, spark.life / spark.maxLife);
+      const { positions, velocities } = spark;
+      for (let index = 0; index < SPARKS_PER_BURST; index += 1) {
         const offset = index * 3;
-        velocities[offset + 1] -= 12 * dt;
+        velocities[offset + 1] -= GRAVITY * dt;
         positions[offset] += velocities[offset] * dt;
         positions[offset + 1] += velocities[offset + 1] * dt;
         positions[offset + 2] += velocities[offset + 2] * dt;
@@ -232,10 +242,7 @@ export class CombatEffects {
 
   /** How many effects are alive, for the debug readout and the browser check. */
   get busy() {
-    return (
-      this.flashes.filter((entry) => entry.life > 0).length +
-      this.tracers.filter((entry) => entry.life > 0).length +
-      this.sparks.filter((entry) => entry.life > 0).length
-    );
+    const alive = (pool) => pool.reduce((sum, entry) => sum + (entry.life > 0 ? 1 : 0), 0);
+    return alive(this.flashes) + alive(this.tracers) + alive(this.sparks);
   }
 }

@@ -12,6 +12,7 @@ import { buildCarGroup } from '../vehicles/models.js';
 import { createCharacter } from '../player/character.js';
 import { PursuitCruiser } from './cruiser.js';
 
+/** How many stars each kind of crime is worth. */
 const SEVERITY = {
   gunshot: 1,
   assault: 1,
@@ -24,9 +25,14 @@ const SEVERITY = {
 
 const MAX_CRUISERS = 4;
 const MAX_COPS = 5;
+/** Seconds of no crime before a quiet, distant street starts cooling the level. */
 const CALM_AFTER = 8;
 const CALM_DISTANCE = 62;
 const DECAY_TIME = 6;
+/** Witness ranges, per kind of witness. */
+const WITNESS = { cop: 62, cruiser: 80, ped: 42 };
+/** Sentinel for "this has not happened yet" in the crime clocks. */
+const NEVER = -99;
 
 export class PoliceSystem {
   constructor({ world, scene, player, vehicles = null, traffic = null, pedestrians = null, combat = null, cameraRig = null, hud = null, seed = 1 }) {
@@ -41,8 +47,9 @@ export class PoliceSystem {
     this.hud = hud;
     this.random = new Random(`${seed}:police`);
     this.wanted = 0;
-    this.lastCrimeAt = -99;
-    this.lastRaiseAt = -99;
+    this.lastCrimeAt = NEVER;
+    this.lastRaiseAt = NEVER;
+    this.lastRunover = NEVER;
     this.calm = 0;
     this.spawnClock = 1.2;
     this.blockClock = 14;
@@ -55,11 +62,14 @@ export class PoliceSystem {
       if (event.kind === 'busted') this.clearWanted('busted');
       this.cops.length = 0;
     });
-    this._fixLanes();
+    this.indexLanes();
   }
 
-  /** Traffic normally annotates the lanes; a police-only world still needs the ends. */
-  _fixLanes() {
+  /**
+   * Traffic normally annotates the lanes with their ends; a police-only world still needs
+   * them, so this is idempotent and fills in whatever is missing.
+   */
+  indexLanes() {
     const lanes = this.world.plan?.lanes ?? [];
     this.laneStart = new Map();
     for (const lane of lanes) {
@@ -107,11 +117,10 @@ export class PoliceSystem {
   raise(levels, reason, x = null, z = null) {
     if (!levels) return this.wanted;
     const next = clamp(this.wanted + levels, 0, 5);
+    // Any new crime resets the chase clock, even when the level does not move.
     this.lastCrimeAt = this.world.elapsed ?? 0;
-    if (next === this.wanted) {
-      // Same stars, but the chase clock resets.
-      return this.wanted;
-    }
+    if (next === this.wanted) return this.wanted;
+
     const previous = this.wanted;
     this.wanted = next;
     this.calm = 0;
@@ -136,16 +145,15 @@ export class PoliceSystem {
   hasWitness(x, z) {
     const px = x ?? this.player.position.x;
     const pz = z ?? this.player.position.z;
+
     for (const cop of this.cops) {
-      if (!cop.dead && Math.hypot(cop.x - px, cop.z - pz) < 62) return true;
+      if (!cop.dead && Math.hypot(cop.x - px, cop.z - pz) < WITNESS.cop) return true;
     }
     for (const cruiser of this.cruisers) {
-      if (Math.hypot(cruiser.x - px, cruiser.z - pz) < 80) return true;
+      if (Math.hypot(cruiser.x - px, cruiser.z - pz) < WITNESS.cruiser) return true;
     }
-    if (this.pedestrians) {
-      for (const ped of this.pedestrians.peds) {
-        if (!ped.dead && Math.hypot(ped.x - px, ped.z - pz) < 42) return true;
-      }
+    for (const ped of this.pedestrians?.peds ?? []) {
+      if (!ped.dead && Math.hypot(ped.x - px, ped.z - pz) < WITNESS.ped) return true;
     }
     return false;
   }
@@ -154,8 +162,11 @@ export class PoliceSystem {
     if (!crime || !crime.type) return;
     this.stats.crimes += 1;
     const levels = SEVERITY[crime.type] ?? 1;
-    // Gunfire is heard: a shot raises less than a body, but it is never silent downtown.
-    if (!this.hasWitness(crime.x, crime.z) && crime.type !== 'copshot' && crime.type !== 'copkill') return;
+    // A crime against the police always counts; anything else needs a witness.
+    const againstPolice = crime.type === 'copshot' || crime.type === 'copkill';
+    if (!againstPolice && !this.hasWitness(crime.x, crime.z)) return;
+
+    // Gunfire is heard: a volley of shots is not six separate reports.
     const now = this.world.elapsed ?? 0;
     if (crime.type === 'gunshot' && now - this.lastRaiseAt < 0.8) return;
     this.lastRaiseAt = now;
@@ -164,8 +175,7 @@ export class PoliceSystem {
 
   /** Called by the vehicle system when the player takes a car in front of witnesses. */
   onCarjack(x, z) {
-    if (!this.hasWitness(x, z)) return;
-    this.raise(1, 'carjack', x, z);
+    if (this.hasWitness(x, z)) this.raise(1, 'carjack', x, z);
   }
 
   /** Called when the player's car knocks a body down. */
@@ -174,13 +184,11 @@ export class PoliceSystem {
   }
 
   get threatDistance() {
+    const { x, z } = this.player.position;
     let best = Infinity;
-    for (const cruiser of this.cruisers) {
-      best = Math.min(best, Math.hypot(cruiser.x - this.player.position.x, cruiser.z - this.player.position.z));
-    }
+    for (const cruiser of this.cruisers) best = Math.min(best, Math.hypot(cruiser.x - x, cruiser.z - z));
     for (const cop of this.cops) {
-      if (cop.dead) continue;
-      best = Math.min(best, Math.hypot(cop.x - this.player.position.x, cop.z - this.player.position.z));
+      if (!cop.dead) best = Math.min(best, Math.hypot(cop.x - x, cop.z - z));
     }
     return best;
   }
@@ -194,21 +202,21 @@ export class PoliceSystem {
   }
 
   // ---------------------------------------------------------------- spawning
-  /** A lane 110..270 m away, preferably behind the player and out of the camera. */
+  /** A lane 105..275 m away, preferably behind the player and out of the camera. */
   pickSpawnLane() {
     const lanes = this.world.plan?.lanes ?? [];
     if (!lanes.length) return null;
     const player = this.player.position;
     const forward = { x: Math.sin(this.player.heading), z: Math.cos(this.player.heading) };
+
     for (let attempt = 0; attempt < 40; attempt += 1) {
       const lane = this.random.pick(lanes);
       const x = lane.from.x + lane.dirX * lane.length * 0.5;
       const z = lane.from.z + lane.dirZ * lane.length * 0.5;
       const distance = Math.hypot(x - player.x, z - player.z);
       if (distance < 105 || distance > 275) continue;
-      const nx = (x - player.x) / distance;
-      const nz = (z - player.z) / distance;
-      const ahead = nx * forward.x + nz * forward.z;
+      // Spawning in plain sight is the one thing that breaks the illusion.
+      const ahead = ((x - player.x) / distance) * forward.x + ((z - player.z) / distance) * forward.z;
       if (ahead > 0.25 && distance < 170) continue;
       return lane;
     }
@@ -217,6 +225,7 @@ export class PoliceSystem {
 
   spawnCruiser(lane = null, { mode = 'chase', x = null, z = null, heading = null } = {}) {
     if (this.cruisers.length >= MAX_CRUISERS + 2) return null;
+
     let cruiser;
     if (x !== null && z !== null) {
       cruiser = new PursuitCruiser({
@@ -232,10 +241,13 @@ export class PoliceSystem {
       if (!chosen) return null;
       cruiser = PursuitCruiser.fromLane(this.world, chosen, null, mode);
     }
+
     if (mode === 'block') {
+      // Across the road, not down it.
       cruiser.heading += Math.PI / 2;
       cruiser.speed = 0;
     }
+
     const view = buildCarGroup('police', 0xe9e9e2);
     this.scene.add(view.group);
     cruiser.attach(view);
@@ -245,16 +257,15 @@ export class PoliceSystem {
     return cruiser;
   }
 
-  /** Roadblocks: two cruisers across the lane ahead at four stars and up. */
+  /** Roadblocks: two cruisers across the lane ahead, at four stars and up. */
   spawnRoadblock() {
     const player = this.player.position;
-    const fx = Math.sin(this.player.heading);
-    const fz = Math.cos(this.player.heading);
-    const aheadX = player.x + fx * 90;
-    const aheadZ = player.z + fz * 90;
-    const found = this.traffic?.laneNear ? this.traffic.laneNear(aheadX, aheadZ, this.player.heading, 22) : null;
+    const aheadX = player.x + Math.sin(this.player.heading) * 90;
+    const aheadZ = player.z + Math.cos(this.player.heading) * 90;
+    const found = this.traffic?.laneNear?.(aheadX, aheadZ, this.player.heading, 22);
     if (!found) return 0;
-    const lane = found.lane;
+
+    const { lane } = found;
     const along = clamp(found.along, 4, lane.length - 8);
     let placed = 0;
     for (const offset of [-0.55, 0.55]) {
@@ -271,15 +282,23 @@ export class PoliceSystem {
 
   spawnCop(x, z) {
     if (this.cops.length >= MAX_COPS) return null;
+
     const character = createCharacter({ jacket: 0x2b3c5e, sleeve: 0x1f2c46, beanie: 0x141d2c });
     character.root.name = 'police-officer';
     this.scene.add(character.root);
-    const surface = this.world.walk.surfaceAt(x, z);
+
+    // A sidearm in the right hand, built from one box.
     const gun = new THREE.Group();
-    const gunMesh = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.26), new THREE.MeshLambertMaterial({ color: 0x1b1e22 }));
+    const gunMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.05, 0.07, 0.26),
+      new THREE.MeshLambertMaterial({ color: 0x1b1e22 }),
+    );
     gunMesh.position.set(0, -0.58, 0.16);
     gun.add(gunMesh);
     character.parts.rightArm.pivot.add(gun);
+
+    const surface = this.world.walk.surfaceAt(x, z);
+    character.root.position.set(x, surface.y, z);
     const cop = {
       x,
       z,
@@ -293,7 +312,6 @@ export class PoliceSystem {
       character,
       speed: 0,
     };
-    character.root.position.set(x, surface.y, z);
     this.cops.push(cop);
     return cop;
   }
@@ -303,6 +321,7 @@ export class PoliceSystem {
     cop.health -= damage;
     if (direction) cop.heading = Math.atan2(direction.x, direction.z);
     if (cop.health > 0) return;
+
     cop.dead = true;
     cop.deadTimer = 26;
     cop.object.rotation.x = -Math.PI / 2;
@@ -326,7 +345,7 @@ export class PoliceSystem {
       return;
     }
 
-    // Decay: quiet streets and distance cool the level one star at a time.
+    // Decay: a quiet street and some distance cool the level one star at a time.
     if (this.wanted > 0) {
       if (elapsed - this.lastCrimeAt > CALM_AFTER && this.threatDistance > CALM_DISTANCE) this.calm += dt;
       else this.calm = 0;
@@ -339,6 +358,7 @@ export class PoliceSystem {
       }
     }
 
+    // Keep as many cruisers on the road as the level calls for.
     const desired = this.wanted === 0 ? 0 : Math.min(MAX_CRUISERS, this.wanted);
     this.spawnClock -= dt;
     if (this.cruisers.length < desired && this.spawnClock <= 0) {
@@ -350,8 +370,7 @@ export class PoliceSystem {
       this.blockClock -= dt;
       if (this.blockClock <= 0) {
         this.blockClock = 17;
-        const blocks = this.cruisers.filter((cruiser) => cruiser.mode === 'block').length;
-        if (blocks < 2) this.spawnRoadblock();
+        if (this.cruisers.filter((cruiser) => cruiser.mode === 'block').length < 2) this.spawnRoadblock();
       }
     }
 
@@ -365,7 +384,6 @@ export class PoliceSystem {
       cruiser.update(dt, player, { wanted: Math.max(1, this.wanted), cameraPosition: null });
       const distance = Math.hypot(cruiser.x - player.position.x, cruiser.z - player.position.z);
 
-      // Ramming: the player's car takes a shove and a knock on the camera.
       if (playerCar && cruiser.ramCooldown <= 0) {
         const carDistance = Math.hypot(cruiser.x - playerCar.x, cruiser.z - playerCar.z);
         if (carDistance < 4.4) {
@@ -376,14 +394,16 @@ export class PoliceSystem {
           playerCar.vx += nx * shove;
           playerCar.vz += nz * shove;
           playerCar.speed *= 0.92;
-          if (this.cameraRig?.kick) this.cameraRig.kick(0.18);
-          if (this.combat) this.combat.damagePlayer(3 + this.wanted, { cause: 'ram', x: cruiser.x, z: cruiser.z });
+          this.cameraRig?.kick?.(0.18);
+          this.combat?.damagePlayer(3 + this.wanted, { cause: 'ram', x: cruiser.x, z: cruiser.z });
           bus.emit('police:ram', { x: cruiser.x, z: cruiser.z, wanted: this.wanted });
         }
       }
+
+      // On foot, a cruiser that reaches the player is a hit, not a shove.
       if (!playerCar && distance < 2.1 && cruiser.speed > 4 && cruiser.ramCooldown <= 0) {
         cruiser.ramCooldown = 2.4;
-        if (this.combat) this.combat.damagePlayer(24, { cause: 'cruiser', x: cruiser.x, z: cruiser.z });
+        this.combat?.damagePlayer(24, { cause: 'cruiser', x: cruiser.x, z: cruiser.z });
         bus.emit('police:ram', { x: cruiser.x, z: cruiser.z, wanted: this.wanted });
       }
 
@@ -395,6 +415,7 @@ export class PoliceSystem {
         this.spawnCop(cruiser.x - 2.2, cruiser.z - 1.2);
       }
 
+      // A dismissed cruiser leaves quietly; a chasing one is retired when far behind.
       const retire = cruiser.mode === 'leave' ? distance > 120 : distance > 430;
       if (retire) {
         this.scene.remove(cruiser.view.group);
@@ -405,7 +426,7 @@ export class PoliceSystem {
     this.updateCops(dt);
     this.checkRunovers();
 
-    // Sirens are a signal for the audio session, not a sound made here.
+    // Sirens are a signal for the audio layer, not a sound made here.
     this.sirenTimer -= dt;
     if (this.wanted > 0 && this.sirenTimer <= 0) {
       this.sirenTimer = 2.5;
@@ -420,8 +441,8 @@ export class PoliceSystem {
 
   updateCops(dt) {
     const player = this.player;
-    const px = player.position.x;
-    const pz = player.position.z;
+    const { x: px, z: pz } = player.position;
+
     for (let index = this.cops.length - 1; index >= 0; index -= 1) {
       const cop = this.cops[index];
       if (cop.dead) {
@@ -432,12 +453,14 @@ export class PoliceSystem {
         }
         continue;
       }
+
+      // The heat is gone: the officer walks away rather than standing there forever.
       if (this.wanted === 0) {
-        // The heat is gone: the officer walks away rather than standing there forever.
         this.scene.remove(cop.object);
         this.cops.splice(index, 1);
         continue;
       }
+
       const dx = px - cop.x;
       const dz = pz - cop.z;
       const distance = Math.hypot(dx, dz) || 1;
@@ -447,17 +470,16 @@ export class PoliceSystem {
       if (distance < 27 && cop.cooldown <= 0 && this.combat && !this.combat.isDown) {
         cop.cooldown = 1.5 + Math.random() * 0.9;
         const originY = cop.y + 1.4;
-        this.combat.effects.muzzle(
-          cop.x + Math.sin(cop.heading) * 0.45,
-          originY,
-          cop.z + Math.cos(cop.heading) * 0.45,
-          { scale: 0.72, color: 0xffd9a0 },
-        );
+        this.combat.effects.muzzle(cop.x + Math.sin(cop.heading) * 0.45, originY, cop.z + Math.cos(cop.heading) * 0.45, {
+          scale: 0.72,
+          color: 0xffd9a0,
+        });
         this.combat.effects.tracer(
           { x: cop.x, y: originY, z: cop.z },
           { x: px, y: player.position.y + 1.15, z: pz },
           { color: 0xffb066, width: 0.03 },
         );
+        // Close range is far more likely to land than a shot across the street.
         if (Math.random() < (distance < 12 ? 0.72 : 0.45)) {
           this.combat.damagePlayer(7 + Math.random() * 4, { cause: 'police', x: cop.x, z: cop.z });
         }
@@ -474,6 +496,7 @@ export class PoliceSystem {
       } else {
         cop.speed = 0;
       }
+
       const surface = this.world.walk.surfaceAt(cop.x, cop.z);
       cop.y = surface.y;
       cop.object.position.set(cop.x, cop.y, cop.z);
@@ -486,9 +509,11 @@ export class PoliceSystem {
   checkRunovers() {
     const car = this.vehicles?.activeCar;
     if (!car || Math.abs(car.speed) < 4.5) return;
+
     const now = this.world.elapsed ?? 0;
-    if (now - (this.lastRunover ?? -99) < 0.3) return;
+    if (now - this.lastRunover < 0.3) return;
     const dir = { x: Math.sin(car.heading), z: Math.cos(car.heading) };
+
     for (const ped of this.pedestrians?.peds ?? []) {
       if (ped.dead) continue;
       if (now - (ped.lastRunover ?? -99) < 2) continue;
@@ -501,6 +526,7 @@ export class PoliceSystem {
       bus.emit('police:runover', { x: ped.x, z: ped.z });
       return;
     }
+
     for (const cop of this.cops) {
       if (cop.dead) continue;
       if (Math.hypot(cop.x - car.x, cop.z - car.z) > 2.3) continue;
@@ -513,15 +539,12 @@ export class PoliceSystem {
 
   /** Everyone leaves after a bust, a clear or a scripted reset. */
   dismiss(force = false) {
-    for (const cruiser of this.cruisers) {
-      if (!cruiser.dismissed) cruiser.dismissed = true;
-    }
-    if (force) {
-      for (const cruiser of this.cruisers) this.scene.remove(cruiser.view.group);
-      this.cruisers.length = 0;
-      for (const cop of this.cops) this.scene.remove(cop.object);
-      this.cops.length = 0;
-    }
+    for (const cruiser of this.cruisers) cruiser.dismissed = true;
+    if (!force) return;
+    for (const cruiser of this.cruisers) this.scene.remove(cruiser.view.group);
+    this.cruisers.length = 0;
+    for (const cop of this.cops) this.scene.remove(cop.object);
+    this.cops.length = 0;
   }
 
   /** HUD/minimap dots. */

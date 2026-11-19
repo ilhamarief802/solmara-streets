@@ -24,6 +24,7 @@ export default {
       heading: Math.PI,
       speed: 9.2,
     });
+    // A steady right foot for the shot; the car still obeys the world.
     car.autopilot = { throttle: 0.3, steer: 0, handbrake: false };
     this.car = car;
 
@@ -47,6 +48,7 @@ export default {
       game.missions.markersHidden = true;
       game.missions.silent = true;
     }
+    // A fixed HUD snapshot: the shot must not wait on the simulation's own refresh.
     game.hud?.update({
       districtName: 'Downtown Core',
       hour: clock.hour,
@@ -72,6 +74,7 @@ export default {
   update(ctx, elapsed) {
     const car = this.car ?? ctx.game.vehicles.activeCar;
     if (!car) return;
+
     const t = easeInOutCubic(clamp01(elapsed / 8));
     const fx = Math.sin(car.heading);
     const fz = Math.cos(car.heading);
@@ -82,6 +85,9 @@ export default {
     const up = this.from.up + (this.to.up - this.from.up) * t;
     const look = this.from.look + (this.to.look - this.from.look) * t;
     const bob = Math.sin(elapsed * 2.1) * 0.025;
+
+    // The camera rides the car: back along its nose, off to the kerb side, a hand above
+    // the roof, looking down the boulevard past it.
     ctx.camera.position.set(
       car.x - fx * back + rx * side,
       car.y + up + bob,

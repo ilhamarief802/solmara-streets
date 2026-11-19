@@ -15,6 +15,10 @@ const MAX_HEALTH = 100;
 const REGEN_DELAY = 9;
 const REGEN_RATE = 2.2;
 const DOWN_TIME = 3.2;
+/** A dead thug's body stays for this long so missions can count the kill. */
+const THUG_LIFETIME = 45;
+/** Two crimes closer together than this are reported as one. */
+const CRIME_INTERVAL = 0.45;
 
 const _cameraDir = new THREE.Vector3();
 const _muzzle = new THREE.Vector3();
@@ -23,6 +27,7 @@ const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _point = new THREE.Vector3();
 
+// One counter for the whole module: a reused id would confuse the kill tally.
 let thugSerial = 0;
 
 export class Combat {
@@ -75,32 +80,34 @@ export class Combat {
     this.thugs = [];
     this.deaths = [];
     this.effects = new CombatEffects(scene, camera);
-    this._buildGun();
+    this.buildGun();
     this._offMouse = bus.on('input:mouse', (event) => {
       if (event.button !== 0) return;
       this.fireHeld = Boolean(event.down);
       if (event.down) this.fireQueued = true;
     });
-    this._offCrash = bus.on('vehicle:crash', (event) => this._onCrash(event));
+    this._offCrash = bus.on('vehicle:crash', (event) => this.onCrash(event));
   }
 
   // ---------------------------------------------------------------- weapon view
-  _buildGun() {
+  // The gun hangs off the right forearm, so the player's own arm swing carries it.
+  buildGun() {
     const group = new THREE.Group();
     group.name = 'player-gun';
     const metal = new THREE.MeshLambertMaterial({ color: 0x23272c });
     const wood = new THREE.MeshLambertMaterial({ color: 0x5a3a24 });
+
     const slide = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.075, 0.3), metal);
     slide.position.set(0, 0.02, 0.13);
     const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.15, 0.08), wood);
     grip.position.set(0, -0.06, 0.01);
     grip.rotation.x = 0.24;
     group.add(slide, grip);
+
     group.position.set(0.03, -0.56, 0.03);
     group.rotation.x = -1.4;
     group.visible = false;
-    const arm = this.player?.character?.parts?.rightArm?.pivot;
-    if (arm) arm.add(group);
+    this.player?.character?.parts?.rightArm?.pivot?.add(group);
     this.gun = group;
   }
 
@@ -134,7 +141,7 @@ export class Combat {
     };
   }
 
-  /** HUD wants a flag it can show for a frame or two after a shot. */
+  /** The HUD shows a fire flag for a frame or two after a shot. */
   get firingNow() {
     return this.firing > 0;
   }
@@ -143,9 +150,10 @@ export class Combat {
   /** Keys the loop reads once per rendered frame: 1-3 choose, R reloads. */
   handleInput(input) {
     if (!input) return;
-    if (input.keyPressed('Digit1') || input.keyPressed('Digit2') || input.keyPressed('Digit3')) {
-      const index = Number(input.keyPressed('Digit1') ? '1' : input.keyPressed('Digit2') ? '2' : '3');
-      this.switchWeapon(WEAPON_ORDER[index - 1]);
+    for (const [code, slot] of [['Digit1', 0], ['Digit2', 1], ['Digit3', 2]]) {
+      if (!input.keyPressed(code)) continue;
+      this.switchWeapon(WEAPON_ORDER[slot]);
+      break;
     }
     if (input.keyPressed('KeyR')) this.reload();
   }
@@ -218,40 +226,38 @@ export class Combat {
    * Aim for hitscan. The camera's centre ray finds the point under the crosshair first;
    * the shot is then fired from the body towards that point, so the third-person boom's
    * parallax cannot make the crosshair lie. In first person the camera is the body, so
-   * the two are the same ray.
+   * the two rays are the same.
    */
   aim(originOut = _muzzle, dirOut = _cameraDir, range = 62) {
     const camera = this.camera;
     camera.getWorldDirection(dirOut);
     const player = this.player;
-    let originX;
-    let originY;
-    let originZ;
+
     if (this.cameraRig?.firstPerson) {
-      originX = camera.position.x + dirOut.x * 0.25;
-      originY = camera.position.y + dirOut.y * 0.25;
-      originZ = camera.position.z + dirOut.z * 0.25;
-      originOut.set(originX, originY, originZ);
+      originOut.set(camera.position.x + dirOut.x * 0.25, camera.position.y + dirOut.y * 0.25, camera.position.z + dirOut.z * 0.25);
       return { origin: originOut, direction: dirOut };
     }
-    // The camera ray's first body: aim the shot at where the crosshair actually landed.
-    const startX = camera.position.x + dirOut.x * 0.3;
-    const startY = camera.position.y + dirOut.y * 0.3;
-    const startZ = camera.position.z + dirOut.z * 0.3;
-    _aim.set(startX, startY, startZ);
+
+    // The camera ray's first body: the shot goes at where the crosshair actually landed.
+    _aim.set(camera.position.x + dirOut.x * 0.3, camera.position.y + dirOut.y * 0.3, camera.position.z + dirOut.z * 0.3);
     const seen = this.pickTarget(_aim, dirOut, range);
-    originX = player.position.x + Math.sin(player.heading) * 0.32;
-    originY = player.position.y + 1.42;
-    originZ = player.position.z + Math.cos(player.heading) * 0.32;
+
+    const originX = player.position.x + Math.sin(player.heading) * 0.32;
+    const originY = player.position.y + 1.42;
+    const originZ = player.position.z + Math.cos(player.heading) * 0.32;
     originOut.set(originX, originY, originZ);
     if (seen) dirOut.set(seen.x - originX, seen.y - originY, seen.z - originZ).normalize();
     return { origin: originOut, direction: dirOut };
   }
 
-  /** The closest damageable body along a ray, or null. */
+  /**
+   * The closest damageable body along a ray, or null. Pedestrians, thugs and cops all
+   * test as a vertical capsule approximated by a sphere at chest height.
+   */
   pickTarget(origin, direction, range) {
     let best = null;
     let bestAlong = range;
+
     const test = (x, y, z, radius, kind, target) => {
       _point.set(x - origin.x, y - origin.y, z - origin.z);
       const along = _point.dot(direction);
@@ -261,19 +267,15 @@ export class Combat {
       bestAlong = along;
       best = { kind, target, distance: along, x, y, z };
     };
-    const peds = this.pedestrians?.peds ?? [];
-    for (const ped of peds) {
-      if (ped.dead) continue;
-      test(ped.x, 1.05, ped.z, 0.58, 'ped', ped);
+
+    for (const ped of this.pedestrians?.peds ?? []) {
+      if (!ped.dead) test(ped.x, 1.05, ped.z, 0.58, 'ped', ped);
     }
     for (const thug of this.thugs) {
-      if (thug.dead) continue;
-      test(thug.x, 1.05, thug.z, 0.6, 'thug', thug);
+      if (!thug.dead) test(thug.x, 1.05, thug.z, 0.6, 'thug', thug);
     }
-    const cops = this.police?.cops ?? [];
-    for (const cop of cops) {
-      if (cop.dead) continue;
-      test(cop.x, 1.08, cop.z, 0.62, 'cop', cop);
+    for (const cop of this.police?.cops ?? []) {
+      if (!cop.dead) test(cop.x, 1.08, cop.z, 0.62, 'cop', cop);
     }
     return best;
   }
@@ -281,8 +283,8 @@ export class Combat {
   /** LMB: one trigger pull. Returns true when something was fired. */
   attack() {
     if (this.suspended || this.isDown) return false;
-    if (this.reloadTimer > 0) return false;
-    if (this.cooldown > 0) return false;
+    if (this.reloadTimer > 0 || this.cooldown > 0) return false;
+
     const weapon = this.weapon;
     if (weapon.melee) return this.punchNow();
     const ammo = this.ammo[weapon.id];
@@ -290,6 +292,7 @@ export class Combat {
       if (!this.reload()) bus.emit('weapon:empty', { id: weapon.id });
       return false;
     }
+
     ammo.clip -= 1;
     this.cooldown = weapon.rate;
     this.firing = 0.11;
@@ -297,46 +300,52 @@ export class Combat {
 
     const { origin, direction } = this.aim();
     if (this.cameraRig?.kick) this.cameraRig.kick(weapon.recoil);
-    this.effects.muzzle(origin.x + direction.x * 0.55, origin.y + direction.y * 0.55 + 0.06, origin.z + direction.z * 0.55, {
-      scale: weapon.id === 'shotgun' ? 1.25 : 0.85,
-      color: weapon.id === 'shotgun' ? 0xffc27a : 0xffe0b0,
-    });
+    this.effects.muzzle(
+      origin.x + direction.x * 0.55,
+      origin.y + direction.y * 0.55 + 0.06,
+      origin.z + direction.z * 0.55,
+      {
+        scale: weapon.id === 'shotgun' ? 1.25 : 0.85,
+        color: weapon.id === 'shotgun' ? 0xffc27a : 0xffe0b0,
+      },
+    );
 
     // A little spread, applied in the camera's own right/up plane.
     _right.set(direction.z, 0, -direction.x).normalize();
     _up.crossVectors(_right, direction).normalize();
     let hitAny = null;
     for (let pellet = 0; pellet < weapon.pellets; pellet += 1) {
-      const spread = weapon.spread;
-      const offsetX = (Math.random() - 0.5) * spread;
-      const offsetY = (Math.random() - 0.5) * spread;
       _aim
         .copy(direction)
-        .addScaledVector(_right, offsetX)
-        .addScaledVector(_up, offsetY)
+        .addScaledVector(_right, (Math.random() - 0.5) * weapon.spread)
+        .addScaledVector(_up, (Math.random() - 0.5) * weapon.spread)
         .normalize();
+
       const hit = this.pickTarget(origin, _aim, weapon.range);
-      const end = hit ? { x: hit.x, y: hit.y, z: hit.z } : {
-        x: origin.x + _aim.x * weapon.range,
-        y: origin.y + _aim.y * weapon.range,
-        z: origin.z + _aim.z * weapon.range,
-      };
-      this.effects.tracer(
-        { x: origin.x, y: origin.y, z: origin.z },
-        end,
-        { color: weapon.tracer ?? 0xffd9a0, width: weapon.id === 'shotgun' ? 0.026 : 0.032 },
-      );
-      if (hit) {
-        hitAny = hit;
-        this.effects.impact(hit.x, hit.y, hit.z, {
-          color: hit.kind === 'ped' ? 0xffd2a0 : 0xffb066,
-          speed: 3.6,
-          count: weapon.id === 'shotgun' ? 10 : 6,
-          size: 0.14,
-        });
-        this.applyDamage(hit, weapon.damage, _aim);
-      }
+      const end = hit
+        ? { x: hit.x, y: hit.y, z: hit.z }
+        : {
+            x: origin.x + _aim.x * weapon.range,
+            y: origin.y + _aim.y * weapon.range,
+            z: origin.z + _aim.z * weapon.range,
+          };
+
+      this.effects.tracer({ x: origin.x, y: origin.y, z: origin.z }, end, {
+        color: weapon.tracer ?? 0xffd9a0,
+        width: weapon.id === 'shotgun' ? 0.026 : 0.032,
+      });
+
+      if (!hit) continue;
+      hitAny = hit;
+      this.effects.impact(hit.x, hit.y, hit.z, {
+        color: hit.kind === 'ped' ? 0xffd2a0 : 0xffb066,
+        speed: 3.6,
+        count: weapon.id === 'shotgun' ? 10 : 6,
+        size: 0.14,
+      });
+      this.applyDamage(hit, weapon.damage, _aim);
     }
+
     if (hitAny) this.stats.hits += 1;
     this.emitCrime({ type: 'gunshot', severity: 1, x: this.player.position.x, z: this.player.position.z });
     bus.emit('combat:fire', {
@@ -355,10 +364,12 @@ export class Combat {
     this.cooldown = WEAPONS.fists.rate;
     this.punch = 0.22;
     this.stats.punches += 1;
+
     const direction = this.camera.getWorldDirection(_cameraDir);
     const flat = Math.hypot(direction.x, direction.z) || 1;
     const fx = direction.x / flat;
     const fz = direction.z / flat;
+
     let best = null;
     let bestDistance = WEAPONS.fists.range;
     const test = (x, z, kind, target) => {
@@ -366,67 +377,66 @@ export class Combat {
       const dz = z - this.player.position.z;
       const distance = Math.hypot(dx, dz);
       if (distance > bestDistance) return;
-      const dot = (dx / (distance || 1)) * fx + (dz / (distance || 1)) * fz;
-      if (dot < 0.4) return;
+      // Only bodies in a rough cone in front of the player.
+      if ((dx / (distance || 1)) * fx + (dz / (distance || 1)) * fz < 0.4) return;
       best = { kind, target, x, z, distance };
       bestDistance = distance;
     };
+
     for (const ped of this.pedestrians?.peds ?? []) if (!ped.dead) test(ped.x, ped.z, 'ped', ped);
     for (const thug of this.thugs) if (!thug.dead) test(thug.x, thug.z, 'thug', thug);
     for (const cop of this.police?.cops ?? []) if (!cop.dead) test(cop.x, cop.z, 'cop', cop);
-    if (best) {
-      const hit = { kind: best.kind, target: best.target, x: best.x, y: 1.15, z: best.z };
-      this.effects.impact(best.x, 1.15, best.z, { color: 0xffd6b0, speed: 2.4, count: 5, size: 0.1 });
-      this.applyDamage(hit, WEAPONS.fists.damage, { x: fx, y: 0, z: fz });
-      this.stats.hits += 1;
-      bus.emit('combat:punch', { target: best.kind, hit: true, x: best.x, z: best.z });
-      return true;
+
+    if (!best) {
+      bus.emit('combat:punch', { target: null, hit: false });
+      return false;
     }
-    bus.emit('combat:punch', { target: null, hit: false });
-    return false;
+    this.effects.impact(best.x, 1.15, best.z, { color: 0xffd6b0, speed: 2.4, count: 5, size: 0.1 });
+    this.applyDamage({ kind: best.kind, target: best.target, x: best.x, y: 1.15, z: best.z }, WEAPONS.fists.damage, {
+      x: fx,
+      y: 0,
+      z: fz,
+    });
+    this.stats.hits += 1;
+    bus.emit('combat:punch', { target: best.kind, hit: true, x: best.x, z: best.z });
+    return true;
   }
 
-  /** Applies one weapon's damage to whatever the ray found. */
+  /** Routes one weapon's damage to whatever the ray or cone found. */
   applyDamage(hit, damage, direction) {
-    if (hit.kind === 'ped') {
-      this.hitPed(hit.target, damage, direction);
-      return;
-    }
-    if (hit.kind === 'thug') {
-      this.hitThug(hit.target, damage, direction);
-      return;
-    }
-    if (hit.kind === 'cop') {
-      if (this.police) this.police.hitCop(hit.target, damage, direction);
-      return;
-    }
+    if (hit.kind === 'ped') this.hitPed(hit.target, damage, direction);
+    else if (hit.kind === 'thug') this.hitThug(hit.target, damage, direction);
+    else if (hit.kind === 'cop') this.police?.hitCop(hit.target, damage, direction);
   }
 
   hitPed(ped, damage, direction) {
     if (!ped || ped.dead) return;
     if (ped.health === undefined) ped.health = MAX_HEALTH;
     ped.health -= damage;
+
     const away = direction ? Math.atan2(direction.x, direction.z) : this.player.heading;
-    if (ped.health <= 0) {
-      ped.dead = true;
-      ped.deadTimer = 24;
-      ped.speed = 0;
-      ped.fleeTimer = 0;
-      this.stats.kills += 1;
-      this.deaths.push({ kind: 'ped', at: this.world.elapsed });
-      bus.emit('npc:dead', { kind: 'ped', x: ped.x, z: ped.z });
-      this.emitCrime({ type: 'kill', severity: 2, x: ped.x, z: ped.z });
+    if (ped.health > 0) {
+      // Still standing: shoved a step, and running from whoever hit them.
+      this.pedestrians?.startle?.(ped, this.player.position.x, this.player.position.z);
+      ped.fleeTimer = Math.max(ped.fleeTimer ?? 0, 2.4);
+      ped.heading = away;
+      ped.threat.x = Math.sin(away);
+      ped.threat.z = Math.cos(away);
+      ped.x += Math.sin(away) * 0.28;
+      ped.z += Math.cos(away) * 0.28;
+      bus.emit('npc:hit', { kind: 'ped', x: ped.x, z: ped.z });
+      this.emitCrime({ type: 'assault', severity: 1, x: ped.x, z: ped.z });
       return;
     }
-    if (this.pedestrians?.startle) this.pedestrians.startle(ped, this.player.position.x, this.player.position.z);
-    ped.fleeTimer = Math.max(ped.fleeTimer ?? 0, 2.4);
-    ped.heading = away;
-    ped.threat.x = Math.sin(away);
-    ped.threat.z = Math.cos(away);
-    ped.x += Math.sin(away) * 0.28;
-    ped.z += Math.cos(away) * 0.28;
-    bus.emit('npc:hit', { kind: 'ped', x: ped.x, z: ped.z });
-    this.emitCrime({ type: 'assault', severity: 1, x: ped.x, z: ped.z });
+
+    ped.dead = true;
+    ped.deadTimer = 24;
+    ped.speed = 0;
+    ped.fleeTimer = 0;
+    this.stats.kills += 1;
+    this.deaths.push({ kind: 'ped', at: this.world.elapsed });
+    bus.emit('npc:dead', { kind: 'ped', x: ped.x, z: ped.z });
+    this.emitCrime({ type: 'kill', severity: 2, x: ped.x, z: ped.z });
   }
 
   // ---------------------------------------------------------------- thugs
@@ -443,7 +453,9 @@ export class Combat {
     });
     character.root.name = `thug-${thugSerial}`;
     this.scene.add(character.root);
+
     const surface = this.world.walk.surfaceAt(x, z);
+    character.root.position.set(x, surface.y, z);
     const thug = {
       id: thugSerial,
       x,
@@ -456,12 +468,12 @@ export class Combat {
       deadTimer: 0,
       boss,
       tag,
+      // A staggered opening shot, so a group does not fire in one volley.
       cooldown: 0.8 + Math.random() * 0.8,
       object: character.root,
       character,
       speed: 0,
     };
-    character.root.position.set(x, surface.y, z);
     this.thugs.push(thug);
     return thug;
   }
@@ -470,13 +482,15 @@ export class Combat {
     if (!thug || thug.dead) return;
     thug.health -= damage;
     if (direction) thug.heading = Math.atan2(direction.x, direction.z);
+
     if (thug.health > 0) {
       thug.object.position.x += (direction?.x ?? 0) * 0.16;
       thug.object.position.z += (direction?.z ?? 0) * 0.16;
       return;
     }
+
     thug.dead = true;
-    thug.deadTimer = 45;
+    thug.deadTimer = THUG_LIFETIME;
     thug.speed = 0;
     thug.object.rotation.x = -Math.PI / 2;
     thug.object.position.y = thug.y + 0.3;
@@ -490,13 +504,16 @@ export class Combat {
     const player = this.player;
     const px = player.position.x;
     const pz = player.position.z;
+
     if (this.stagedThugs) {
+      // A posed shot: hold them still, but keep them breathing.
       for (const thug of this.thugs) {
         if (thug.dead) continue;
         thug.character.animate(dt, { speed: 0, grounded: true, sprinting: false, surface: 'pavement' });
       }
       return;
     }
+
     for (const thug of this.thugs) {
       if (thug.dead) {
         thug.deadTimer -= dt;
@@ -507,10 +524,9 @@ export class Combat {
       const distance = Math.hypot(dx, dz) || 1;
       thug.heading = Math.atan2(dx, dz);
       thug.cooldown -= dt;
+
       if (!this.isDown && distance < 30 && thug.cooldown <= 0) {
         thug.cooldown = thug.boss ? 1.35 : 1.8 + Math.random() * 0.8;
-        const hitChance = distance < 12 ? 0.8 : 0.55;
-        const damage = thug.boss ? 11 : 7;
         const originY = thug.y + 1.35;
         this.effects.muzzle(thug.x + Math.sin(thug.heading) * 0.4, originY, thug.z + Math.cos(thug.heading) * 0.4, {
           scale: 0.7,
@@ -520,44 +536,47 @@ export class Combat {
           { x: px, y: player.position.y + 1.1, z: pz },
           { color: 0xff9f6a, width: 0.028 },
         );
-        if (Math.random() < hitChance) this.damagePlayer(damage, { cause: 'thug', x: thug.x, z: thug.z });
+        // Close range is far more likely to land than a shot across the street.
+        if (Math.random() < (distance < 12 ? 0.8 : 0.55)) {
+          this.damagePlayer(thug.boss ? 11 : 7, { cause: 'thug', x: thug.x, z: thug.z });
+        }
         bus.emit('combat:thugfire', { x: thug.x, z: thug.z });
       }
+
       if (distance > 2.1 && distance < 34) {
         const speed = thug.boss ? 2.2 : 2.7;
         const step = Math.min(speed * dt, distance - 1.8);
-        const nx = thug.x + (dx / distance) * step;
-        const nz = thug.z + (dz / distance) * step;
-        const resolved = this.world.resolveCircle(nx, nz, 0.36);
+        const resolved = this.world.resolveCircle(thug.x + (dx / distance) * step, thug.z + (dz / distance) * step, 0.36);
         thug.x = resolved.x;
         thug.z = resolved.z;
         thug.speed = speed;
       } else {
         thug.speed = 0;
       }
+
       const surface = this.world.walk.surfaceAt(thug.x, thug.z);
       thug.y = surface.y;
       thug.object.position.set(thug.x, thug.y, thug.z);
       thug.object.rotation.y = thug.heading;
       thug.character.animate(dt, { speed: thug.speed, grounded: true, sprinting: false, surface: surface.kind });
     }
+
     // Clear the corpses once the missions have had time to count them.
     for (let index = this.thugs.length - 1; index >= 0; index -= 1) {
       const thug = this.thugs[index];
-      if (thug.dead && thug.deadTimer <= 0) {
-        this.scene.remove(thug.object);
-        this.thugs.splice(index, 1);
-      }
+      if (!thug.dead || thug.deadTimer > 0) continue;
+      this.scene.remove(thug.object);
+      this.thugs.splice(index, 1);
     }
   }
 
   /** Kills by tag, for the mission system's objective checks. */
   countDead(tag) {
-    return this.deaths.filter((entry) => entry.tag === tag).length;
+    return this.deaths.reduce((sum, entry) => sum + (entry.tag === tag ? 1 : 0), 0);
   }
 
   countAlive(tag) {
-    return this.thugs.filter((thug) => !thug.dead && thug.tag === tag).length;
+    return this.thugs.reduce((sum, thug) => sum + (!thug.dead && thug.tag === tag ? 1 : 0), 0);
   }
 
   clearThugs(tag = null) {
@@ -574,6 +593,8 @@ export class Combat {
     if (this.isDown || this.invuln > 0) return;
     this.invuln = 0.12;
     this.lastDamage = 0;
+
+    // Armour soaks most of a hit until it is gone; health takes the remainder.
     let remaining = amount;
     if (this.armour > 0) {
       const absorbed = Math.min(this.armour, remaining * 0.7);
@@ -581,13 +602,7 @@ export class Combat {
       remaining -= absorbed;
     }
     this.health = Math.max(0, this.health - remaining);
-    bus.emit('health:change', {
-      health: this.health,
-      armour: this.armour,
-      cause,
-      x,
-      z,
-    });
+    bus.emit('health:change', { health: this.health, armour: this.armour, cause, x, z });
     if (this.health <= 0) this.down(cause);
   }
 
@@ -607,6 +622,7 @@ export class Combat {
     const kind = this.downKind;
     const spawn = kind === 'busted' ? this.policeSpawn() : this.hospitalSpawn();
     if (this.vehicles?.activeCar) this.vehicles.exit(this.player);
+
     this.player.teleport(spawn.x, spawn.z, spawn.heading, spawn.y ?? null);
     this.player.character.rest();
     this.health = MAX_HEALTH;
@@ -615,6 +631,7 @@ export class Combat {
     this.invuln = 1.4;
     this.downKind = null;
     this.downTimer = 0;
+
     if (this.cameraRig) {
       this.cameraRig.anchor.x = spawn.x;
       this.cameraRig.anchor.z = spawn.z;
@@ -660,8 +677,7 @@ export class Combat {
         const weapon = this.weapon;
         const ammo = this.ammo[weapon.id];
         if (ammo && !weapon.melee) {
-          const needed = weapon.clipSize - ammo.clip;
-          const moved = Math.min(needed, ammo.reserve);
+          const moved = Math.min(weapon.clipSize - ammo.clip, ammo.reserve);
           ammo.clip += moved;
           ammo.reserve -= moved;
           bus.emit('weapon:reloaded', { id: weapon.id, clip: ammo.clip, reserve: ammo.reserve });
@@ -679,17 +695,13 @@ export class Combat {
       }
     }
 
-    if (!this.suspended && (this.fireHeld || this.fireQueued)) {
-      this.fireQueued = false;
-      this.attack();
-    } else {
-      this.fireQueued = false;
-    }
+    if (!this.suspended && (this.fireHeld || this.fireQueued)) this.attack();
+    this.fireQueued = false;
 
     this.updateThugs(dt);
 
-    // The gun and the punch arm: the character rig is animated by the player system, so
-    // the aim pose is applied afterwards, on the same frame.
+    // The gun and the punch arm: the player system animates the rig, so the aim pose is
+    // applied afterwards, on the same frame.
     if (this.gun) this.gun.visible = !this.weapon.melee && !this.isDown;
     const arm = this.player.character?.parts?.rightArm?.pivot;
     if (arm) {
@@ -698,15 +710,15 @@ export class Combat {
     }
   }
 
-  /** Published consequence, with a small rate limit so one burst is one report. */
+  /** Published consequence, rate-limited so one burst of shots is one report. */
   emitCrime(crime) {
     const now = this.world.elapsed ?? 0;
-    if (now - this.lastCrime < 0.45) return;
+    if (now - this.lastCrime < CRIME_INTERVAL) return;
     this.lastCrime = now;
     bus.emit('crime', { ...crime, at: now });
   }
 
-  _onCrash(event) {
+  onCrash(event) {
     const car = this.vehicles?.activeCar;
     if (!car || event.impact < 5) return;
     car.health = Math.max(0, (car.health ?? 100) - event.impact * 1.6);

@@ -1,6 +1,6 @@
-// The player's body, built from boxes at run time: no model files, no textures. The rig
-// is a hip with two legs, a chest with two arms and a head, all pivoting where a real
-// body does, so the gait is a handful of sin() calls. He wears the jacket the whole city
+// The player's body, built from boxes at run time: no model files, no textures. The rig is
+// a hip with two legs, a chest with two arms and a head, all pivoting where a real body
+// does, so the gait is a handful of sin() calls. He wears the jacket the whole city
 // recognises him by: burnt orange canvas, teal beanie, pale trainers.
 
 import { clamp, clamp01 } from '../core/math.js';
@@ -12,35 +12,41 @@ const PALETTE = {
   trousers: 0x27313f,
   shoe: 0xe9e1d1,
   skin: 0xc58a5a,
-  hair: 0x2a1d17,
   beanie: 0x2f8f8a,
   visor: 0x171b20,
   zip: 0xd9d2c2,
+  pack: 0x3a4a55,
 };
 
+const HIP_HEIGHT = 0.94;
+
+// One material per colour, shared by every box that wears it: the rig costs a few draws,
+// not one material per limb.
 const materials = new Map();
 
 /**
  * A lit material with a whisper of self-illumination. The city has no shadow maps and
- * almost no point lights, so at dusk a pure Lambert jersey turns into a silhouette; a
+ * almost no point lights, so at dusk a plain Lambert jersey turns into a silhouette; a
  * few percent of the base colour keeps the hero readable without glowing at noon.
  */
-function material(hex, options = {}) {
-  const key = `${hex}:${options.emissive ?? 0}`;
-  let mat = materials.get(key);
+function material(hex) {
+  let mat = materials.get(hex);
   if (!mat) {
-    const emissive = options.emissive ?? new THREE.Color(hex).multiplyScalar(options.lift ?? 0.45);
-    mat = new THREE.MeshLambertMaterial({ color: hex, emissive });
-    materials.set(key, mat);
+    mat = new THREE.MeshLambertMaterial({
+      color: hex,
+      emissive: new THREE.Color(hex).multiplyScalar(0.45),
+    });
+    materials.set(hex, mat);
   }
   return mat;
 }
 
 function box(width, height, depth, hex, options = {}) {
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material(hex, options));
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material(hex));
   mesh.position.set(options.x ?? 0, options.y ?? 0, options.z ?? 0);
   if (options.rotX) mesh.rotation.x = options.rotX;
   if (options.rotY) mesh.rotation.y = options.rotY;
+  // The parts are posed by their parent groups only, so their own matrix is static.
   mesh.matrixAutoUpdate = false;
   mesh.updateMatrix();
   return mesh;
@@ -52,24 +58,20 @@ function group(x, y, z) {
   return node;
 }
 
-/** One limb: a pivot at the joint with a box hanging below it. */
+/** One limb: a pivot at the joint with a box hanging below it, and an optional foot. */
 function limb(width, length, depth, hex, options = {}) {
   const pivot = new THREE.Group();
   const segment = box(width, length, depth, hex, { y: -length / 2 });
   pivot.add(segment);
   if (options.extremity) {
-    const foot = box(width * 1.05, 0.12, depth * 1.5, options.extremity, {
-      y: -length - 0.03,
-      z: depth * 0.34,
-    });
-    pivot.add(foot);
+    pivot.add(box(width * 1.05, 0.12, depth * 1.5, options.extremity, { y: -length - 0.03, z: depth * 0.34 }));
   }
   return { pivot, segment };
 }
 
 /**
  * Builds the character and returns the root plus the animation handle.
- * @param {object} options { jacket, beanie, scale }
+ * @param {object} options { jacket, sleeve, beanie, scale }
  */
 export function createCharacter(options = {}) {
   const root = new THREE.Group();
@@ -81,8 +83,7 @@ export function createCharacter(options = {}) {
   const sleeve = options.sleeve ?? PALETTE.sleeve;
   const beanie = options.beanie ?? PALETTE.beanie;
 
-  const hipHeight = 0.94;
-  const hips = group(0, hipHeight, 0);
+  const hips = group(0, HIP_HEIGHT, 0);
   rig.add(hips);
 
   // Torso: a jacket block with a lighter collar and a zip line, so he reads at distance.
@@ -93,7 +94,7 @@ export function createCharacter(options = {}) {
   chest.add(box(0.2, 0.1, 0.3, PALETTE.collar, { y: 0.55 }));
   chest.add(box(0.035, 0.5, 0.012, PALETTE.zip, { y: 0.3, z: 0.148 }));
   // A small pack over one shoulder: the silhouette from the third-person camera.
-  chest.add(box(0.3, 0.34, 0.14, 0x3a4a55, { y: 0.32, z: -0.21 }));
+  chest.add(box(0.3, 0.34, 0.14, PALETTE.pack, { y: 0.32, z: -0.21 }));
 
   // Head and beanie.
   const neck = group(0, 0.56, 0);
@@ -107,13 +108,11 @@ export function createCharacter(options = {}) {
   head.add(box(0.22, 0.06, 0.02, PALETTE.visor, { y: 0.15, z: 0.128 }));
   head.add(box(0.06, 0.08, 0.05, PALETTE.skin, { y: 0.09, z: 0.15 }));
 
-  // Arms: pivot at the shoulder, slight outward cant.
+  // Arms: pivot at the shoulder, a slight outward cant.
   const leftArm = limb(0.15, 0.58, 0.17, sleeve, { extremity: PALETTE.skin });
   const rightArm = limb(0.15, 0.58, 0.17, sleeve, { extremity: PALETTE.skin });
   leftArm.pivot.position.set(-0.33, 0.5, 0);
   rightArm.pivot.position.set(0.33, 0.5, 0);
-  leftArm.pivot.rotation.z = 0.08;
-  rightArm.pivot.rotation.z = -0.08;
   chest.add(leftArm.pivot, rightArm.pivot);
 
   // Legs: pivot at the hip, trousers and pale trainers.
@@ -138,18 +137,13 @@ export function createCharacter(options = {}) {
   let idleClock = 0;
   let breath = 0;
 
-  /**
-   * Poses the gait from the speed the body actually moved at.
-   * @param {number} dt seconds
-   * @param {object} state { speed (m/s), grounded, sprinting, driving }
-   */
+  /** Poses the limbs from the speed the body actually moved at. */
   function animate(dt, state = {}) {
     const speed = state.speed ?? 0;
-    const grounded = state.grounded !== false;
     idleClock += dt;
     breath += dt * 1.7;
 
-    if (!grounded) {
+    if (state.grounded === false) {
       // Airborne: legs tucked, arms up, a small forward lean.
       leftLeg.pivot.rotation.x = 0.5;
       rightLeg.pivot.rotation.x = -0.3;
@@ -168,25 +162,22 @@ export function createCharacter(options = {}) {
     phase += speed * dt * 2.35;
     const swing = Math.sin(phase);
     const stride = clamp(speed / 7.4, 0, 1);
-    const amplitude = 0.38 + stride * 0.55;
 
-    leftLeg.pivot.rotation.x = swing * amplitude;
-    rightLeg.pivot.rotation.x = -swing * amplitude;
+    leftLeg.pivot.rotation.x = swing * (0.38 + stride * 0.55);
+    rightLeg.pivot.rotation.x = -swing * (0.38 + stride * 0.55);
     leftArm.pivot.rotation.x = -swing * (0.3 + stride * 0.42);
     rightArm.pivot.rotation.x = swing * (0.3 + stride * 0.42);
     leftArm.pivot.rotation.z = 0.08 + stride * 0.06;
     rightArm.pivot.rotation.z = -0.08 - stride * 0.06;
 
-    // Knees bend on the back swing, faked by lifting the shin a little.
-    const bob = Math.abs(Math.sin(phase)) * (0.015 + stride * 0.045) * movement;
-    hips.position.y = hipHeight + bob;
-    // Lean into the run, and roll with the stride.
+    // The hips rise on each footfall; the rig leans into the run and rolls with the stride.
+    hips.position.y = HIP_HEIGHT + Math.abs(swing) * (0.015 + stride * 0.045) * movement;
     rig.rotation.x = 0.05 * movement + stride * 0.09;
-    rig.rotation.z = Math.sin(phase) * 0.012 * movement;
+    rig.rotation.z = swing * 0.012 * movement;
     chest.rotation.y = swing * 0.06 * movement;
 
-    // Idle breathing: a slow swell of the chest, hands loose.
     if (speed < 0.2) {
+      // Idle breathing: a slow swell of the chest, hands loose.
       chest.scale.set(1 + Math.sin(breath) * 0.012, 1 + Math.sin(breath) * 0.02, 1);
       const sway = Math.sin(idleClock * 0.6) * 0.03;
       leftArm.pivot.rotation.x += sway;
@@ -207,7 +198,7 @@ export function createCharacter(options = {}) {
     rightArm.pivot.rotation.x = 0;
     leftArm.pivot.rotation.z = 0.08;
     rightArm.pivot.rotation.z = -0.08;
-    hips.position.y = hipHeight;
+    hips.position.y = HIP_HEIGHT;
     rig.rotation.x = 0;
     rig.rotation.z = 0;
     chest.rotation.y = 0;

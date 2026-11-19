@@ -1,8 +1,8 @@
-// The minimap: one offscreen canvas holding the whole city drawn once from the plan's
-// own geometry (blocks, roads, the ring highway and the two coasts), then a small live
-// canvas that slides a window of that map under the player each frame. North is up, the
-// player arrow turns, and the map keeps its landmarks readable when the HUD is scaled
-// down: thick roads, flat district colours, one bright ring for the highway.
+// The minimap: one offscreen canvas holding the whole city drawn once from the plan's own
+// geometry (blocks, roads, the ring highway and the two coasts), then a small live canvas
+// that slides a window of that map under the player each frame. North is up, the player
+// arrow turns, and the map keeps its landmarks readable when the HUD is scaled down: thick
+// roads, flat district colours, one bright ring for the highway.
 
 const DISTRICT_FILL = {
   downtown: '#3d4b58',
@@ -19,6 +19,11 @@ const ROAD = '#93a4ad';
 const HIGHWAY = '#e0b470';
 const WATER = '#16313e';
 const COAST = '#7fb6d9';
+const PARK = '#35513f';
+const LANDMARK_PIP = 'rgba(243, 231, 207, 0.72)';
+
+/** The static map is painted at this width; its height follows the city's aspect. */
+const STATIC_WIDTH = 1024;
 
 /** A rounded rectangle path, since roundRect is not in every capture browser. */
 function rounded(ctx, x, y, width, height, radius) {
@@ -42,43 +47,41 @@ export class Minimap {
     this.canvas = canvas;
     this.ctx = canvas ? canvas.getContext('2d') : null;
     this.size = canvas?.width ?? 180;
-    this.diameter = this.size;
     this.viewMetres = 320;
-    this.clock = 0;
     this.pulse = 0;
     this.drawn = 0;
     this.bounds = world.minimap.bounds;
     this.staticCanvas = null;
     this.staticScale = 0;
+    this.lastOrigin = { sx: 0, sz: 0 };
     this.buildStatic();
   }
 
   /** Paints the whole city once into an offscreen canvas. */
   buildStatic() {
     if (typeof document === 'undefined' || !this.ctx) return;
-    const bounds = this.bounds;
-    const width = 1024;
-    const height = Math.round((width * (bounds.maxZ - bounds.minZ)) / (bounds.maxX - bounds.minX));
-    const scale = width / (bounds.maxX - bounds.minX);
+    const { bounds } = this;
+    const spanX = bounds.maxX - bounds.minX;
+    const spanZ = bounds.maxZ - bounds.minZ;
+    const scale = STATIC_WIDTH / spanX;
+    const height = Math.round(STATIC_WIDTH * (spanZ / spanX));
+
     const canvas = document.createElement('canvas');
-    canvas.width = width;
+    canvas.width = STATIC_WIDTH;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
     const mx = (x) => (x - bounds.minX) * scale;
     const mz = (z) => (z - bounds.minZ) * scale;
 
     ctx.fillStyle = LAND;
-    ctx.fillRect(0, 0, width, height);
+    ctx.fillRect(0, 0, STATIC_WIDTH, height);
 
     // Blocks first: district colour, parks a shade greener.
     for (const block of this.world.minimap.blocks) {
-      ctx.fillStyle = block.park ? '#35513f' : DISTRICT_FILL[block.district] ?? '#3a4650';
-      const x = mx(block.x0);
-      const z = mz(block.z0);
-      const w = (block.x1 - block.x0) * scale;
-      const h = (block.z1 - block.z0) * scale;
-      ctx.fillRect(x, z, w, h);
+      ctx.fillStyle = block.park ? PARK : DISTRICT_FILL[block.district] ?? '#3a4650';
+      ctx.fillRect(mx(block.x0), mz(block.z0), (block.x1 - block.x0) * scale, (block.z1 - block.z0) * scale);
     }
 
     // Streets, then the elevated ring over them with a dark casing so it reads as a
@@ -92,6 +95,7 @@ export class Minimap {
       ctx.lineTo(mx(road.x1), mz(road.z1));
       ctx.stroke();
     }
+
     const ring = this.world.minimap.highway;
     if (ring?.length) {
       ctx.strokeStyle = 'rgba(10, 16, 20, 0.85)';
@@ -113,6 +117,7 @@ export class Minimap {
     for (const water of this.world.minimap.water) {
       ctx.fillRect(mx(water.x0), mz(water.z0), (water.x1 - water.x0) * scale, (water.z1 - water.z0) * scale);
     }
+
     ctx.strokeStyle = COAST;
     ctx.lineWidth = 1.4;
     ctx.beginPath();
@@ -128,8 +133,8 @@ export class Minimap {
     ctx.lineTo(mx(25), mz(640));
     ctx.stroke();
 
-    // Landmark pips: a white dot for each named place, so the map has bearings.
-    ctx.fillStyle = 'rgba(243, 231, 207, 0.72)';
+    // Landmark pips: a pale dot for each named place, so the map has bearings.
+    ctx.fillStyle = LANDMARK_PIP;
     for (const landmark of this.world.minimap.landmarks) {
       ctx.beginPath();
       ctx.arc(mx(landmark.x), mz(landmark.z), 2.2, 0, Math.PI * 2);
@@ -144,17 +149,23 @@ export class Minimap {
   draw(data = {}) {
     const ctx = this.ctx;
     if (!ctx || !this.staticCanvas) return;
-    const size = this.size;
+
+    const { size, bounds, staticScale: scale } = this;
     const x = data.x ?? 0;
     const z = data.z ?? 0;
-    const scale = this.staticScale;
     const sourceSize = this.viewMetres * scale;
-    const maxX = this.staticCanvas.width - sourceSize;
-    const maxZ = this.staticCanvas.height - sourceSize;
-    let sx = (x - this.bounds.minX) * scale - sourceSize / 2;
-    let sz = (z - this.bounds.minZ) * scale - sourceSize / 2;
-    sx = Math.max(0, Math.min(maxX, sx));
-    sz = Math.max(0, Math.min(maxZ, sz));
+    // Clamp the window so it never samples past the map's edge.
+    const sx = Math.max(0, Math.min(this.staticCanvas.width - sourceSize, (x - bounds.minX) * scale - sourceSize / 2));
+    const sz = Math.max(0, Math.min(this.staticCanvas.height - sourceSize, (z - bounds.minZ) * scale - sourceSize / 2));
+    const toSource = (wx, wz) => ({
+      x: (wx - bounds.minX) * scale - sx,
+      y: (wz - bounds.minZ) * scale - sz,
+    });
+    const screenScale = size / sourceSize;
+    const toScreen = (wx, wz) => {
+      const point = toSource(wx, wz);
+      return { x: point.x * screenScale, y: point.y * screenScale };
+    };
 
     ctx.clearRect(0, 0, size, size);
     ctx.save();
@@ -164,11 +175,6 @@ export class Minimap {
     ctx.fillRect(0, 0, size, size);
     ctx.drawImage(this.staticCanvas, sx, sz, sourceSize, sourceSize, 0, 0, size, size);
 
-    const toScreen = (wx, wz) => ({
-      x: ((wx - this.bounds.minX) * scale - sx) * (size / sourceSize),
-      y: ((wz - this.bounds.minZ) * scale - sz) * (size / sourceSize),
-    });
-
     // A soft vignette so the dots near the edge do not fight the border.
     const vignette = ctx.createRadialGradient(size / 2, size / 2, size * 0.3, size / 2, size / 2, size * 0.62);
     vignette.addColorStop(0, 'rgba(0,0,0,0)');
@@ -176,20 +182,19 @@ export class Minimap {
     ctx.fillStyle = vignette;
     ctx.fillRect(0, 0, size, size);
 
-    // Traffic: small pale dots, only those inside the window.
+    // Traffic: small pale dots, and only those inside the window.
     if (data.traffic) {
       ctx.fillStyle = 'rgba(232, 240, 244, 0.72)';
       for (const car of data.traffic) {
-        const distance = Math.hypot(car.x - x, car.z - z);
-        if (distance > this.viewMetres * 0.52) continue;
+        if (Math.hypot(car.x - x, car.z - z) > this.viewMetres * 0.52) continue;
         const point = toScreen(car.x, car.z);
         ctx.fillRect(point.x - 1.1, point.y - 1.4, 2.2, 2.8);
       }
     }
 
     // Police: strobing cruisers, steady blue dots for officers on foot.
-    const blink = Math.sin(this.pulse * 9) > 0;
     if (data.cruisers) {
+      const blink = Math.sin(this.pulse * 9) > 0;
       for (const cruiser of data.cruisers) {
         const point = toScreen(cruiser.x, cruiser.z);
         ctx.fillStyle = blink ? '#ff5a4a' : '#5aa0ff';
@@ -210,24 +215,22 @@ export class Minimap {
     }
 
     // Mission and shop markers: a bright diamond with a dark keyline.
-    if (data.markers) {
-      for (const marker of data.markers) {
-        if (marker.hidden) continue;
-        const point = toScreen(marker.x, marker.z);
-        const pulse = 1 + Math.sin(this.pulse * 4) * 0.12;
-        const radius = (marker.kind === 'mission' ? 6.2 : 5) * pulse;
-        ctx.beginPath();
-        ctx.moveTo(point.x, point.y - radius);
-        ctx.lineTo(point.x + radius, point.y);
-        ctx.lineTo(point.x, point.y + radius);
-        ctx.lineTo(point.x - radius, point.y);
-        ctx.closePath();
-        ctx.fillStyle = marker.kind === 'mission' ? '#ffd166' : '#7fe0c3';
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(12, 16, 22, 0.85)';
-        ctx.lineWidth = 1.6;
-        ctx.stroke();
-      }
+    for (const marker of data.markers ?? []) {
+      if (marker.hidden) continue;
+      const point = toScreen(marker.x, marker.z);
+      const beat = 1 + Math.sin(this.pulse * 4) * 0.12;
+      const radius = (marker.kind === 'mission' ? 6.2 : 5) * beat;
+      ctx.beginPath();
+      ctx.moveTo(point.x, point.y - radius);
+      ctx.lineTo(point.x + radius, point.y);
+      ctx.lineTo(point.x, point.y + radius);
+      ctx.lineTo(point.x - radius, point.y);
+      ctx.closePath();
+      ctx.fillStyle = marker.kind === 'mission' ? '#ffd166' : '#7fe0c3';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(12, 16, 22, 0.85)';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
     }
 
     // The player: a white arrow with a dark outline, turned to the heading.
@@ -248,8 +251,8 @@ export class Minimap {
     ctx.stroke();
     ctx.restore();
 
-    // North marker, fixed because the map is north-up.
-    ctx.fillStyle = 'rgba(243, 231, 207, 0.7)';
+    // North is fixed, because the map is north-up.
+    ctx.fillStyle = LANDMARK_PIP;
     ctx.font = '600 10px ui-monospace, monospace';
     ctx.textAlign = 'center';
     ctx.fillText('N', size - 14, 17);
@@ -272,6 +275,7 @@ export class Minimap {
     if (!this.ctx) return 0;
     const pixels = this.ctx.getImageData(0, 0, this.size, this.size).data;
     let covered = 0;
+    // Every 37th pixel: a cheap sample that still catches a blank canvas.
     for (let index = 3; index < pixels.length; index += 4 * 37) {
       if (pixels[index] > 8) covered += 1;
     }

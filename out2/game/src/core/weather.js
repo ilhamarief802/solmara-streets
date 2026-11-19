@@ -1,7 +1,7 @@
 // Weather and wind. Solmara is coastal: most days are clear and hazy, some are
 // overcast, and the sea breeze turns through the afternoon. The weather owns a small
 // state machine that changes on its own clock, and the wind vector drives palms, flags
-// and later the water shader's swell direction.
+// and the water shader's swell direction.
 
 import { Random } from './rng.js';
 import { clamp, lerp, wrap } from './math.js';
@@ -55,7 +55,10 @@ export const WEATHER_TYPES = {
   },
 };
 
+// Weighted by repetition: most rolls land on clear, haze is common, rain is rare.
 const ORDER = ['clear', 'clear', 'clear', 'hazy', 'hazy', 'overcast', 'rain'];
+
+const TRANSITION_SECONDS = 14;
 
 export class Weather {
   constructor(seed = 'solmara-weather') {
@@ -75,8 +78,9 @@ export class Weather {
     this.exposureBias = this.current.exposure;
   }
 
-  /** Immediately switches, no fade. Used by shots before warm-up. */
+  /** Switches immediately, with no fade. Shots use this before their warm-up. */
   set(typeId) {
+    // An unknown id falls back to clear rather than leaving the weather undefined.
     const type = WEATHER_TYPES[typeId] ?? WEATHER_TYPES.clear;
     this.current = type;
     this.target = type;
@@ -105,7 +109,7 @@ export class Weather {
 
     if (this.blend < 1) {
       this.transitionTime += dt;
-      this.blend = clamp(this.transitionTime / 14, 0, 1);
+      this.blend = clamp(this.transitionTime / TRANSITION_SECONDS, 0, 1);
       if (this.blend >= 1) {
         this.current = this.target;
         bus.emit('weather:change', { id: this.current.id, label: this.current.label });

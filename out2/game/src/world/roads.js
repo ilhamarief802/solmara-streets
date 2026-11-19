@@ -8,9 +8,18 @@ import { Random } from '../core/rng.js';
 import { GRID, HIGHWAY, isWaterAt } from './plan.js';
 import { districtOf } from './districts.js';
 
+// Heights step up from asphalt to pavement to the kerb cap; the walk surface mirrors it.
 const ROAD_Y = 0.08;
 const SIDEWALK_Y = 0.16;
 const KERB_TOP = 0.22;
+
+// The four approaches of a signalised junction, as (offset, strip rotation) pairs.
+const CROSSING_ARMS = [
+  { dx: 0, dz: -1, rot: 0 },
+  { dx: 0, dz: 1, rot: 0 },
+  { dx: -1, dz: 0, rot: Math.PI / 2 },
+  { dx: 1, dz: 0, rot: Math.PI / 2 },
+];
 
 /**
  * Builds the street grid.
@@ -22,51 +31,46 @@ export function buildRoads(plan, textures, options = {}) {
   const random = new Random(`${plan.seed}:roads`);
 
   const asphalt = new MeshBuilder('road-asphalt');
-  const paint = new MeshBuilder('road-markings');
   const crossings = new MeshBuilder('crossings');
   const pavements = new MeshBuilder('pavements');
   const kerbs = new MeshBuilder('kerbs');
-
-  const roadColor = colorTriple(0xffffff);
-  const kerbColor = colorTriple(0xffffff);
+  const white = colorTriple(0xffffff);
   let crossingCount = 0;
 
   for (const edge of plan.edges) {
-    if (edge.bridge) continue; // bridge decks are landmarks.js's job
+    // Bridge decks belong to landmarks.js; water has no street to lay.
+    if (edge.bridge) continue;
     if (isWaterAt((edge.ax + edge.bx) / 2, (edge.az + edge.bz) / 2)) continue;
-    const length = edge.length;
     asphalt.plane(
       (edge.ax + edge.bx) / 2,
       (edge.az + edge.bz) / 2,
       edge.width,
-      length + 1,
+      edge.length + 1,
       ROAD_Y,
-      roadColor,
-      { rotY: Math.atan2(edge.bx - edge.ax, edge.bz - edge.az), uvScale: 12, repeatX: 1, repeatY: length / 20 },
+      white,
+      {
+        rotY: Math.atan2(edge.bx - edge.ax, edge.bz - edge.az),
+        uvScale: 12,
+        repeatX: 1,
+        repeatY: edge.length / 20,
+      },
     );
   }
 
   // Junction caps hide the seams where four ribbons meet.
   for (const node of plan.nodes) {
-    asphalt.plane(node.x, node.z, GRID.roadWidth + 2, GRID.roadWidth + 2, ROAD_Y + 0.002, roadColor, { uvScale: 10 });
+    asphalt.plane(node.x, node.z, GRID.roadWidth + 2, GRID.roadWidth + 2, ROAD_Y + 0.002, white, { uvScale: 10 });
   }
 
-  // Zebra crossings on the approaches of the busier junctions.
-  const stripes = 5;
+  // Zebra crossings on the approaches of the busier junctions. The crossing texture is a
+  // run of bars along U, so one 18 m strip reads as a zebra.
   for (const node of plan.nodes) {
     if (!node.signal) continue;
-    const arms = [
-      { dx: 0, dz: -1, rot: 0 },
-      { dx: 0, dz: 1, rot: 0 },
-      { dx: -1, dz: 0, rot: Math.PI / 2 },
-      { dx: 1, dz: 0, rot: Math.PI / 2 },
-    ];
-    for (const arm of arms) {
+    for (const arm of CROSSING_ARMS) {
       const cx = node.x + arm.dx * 13;
       const cz = node.z + arm.dz * 13;
       if (isWaterAt(cx, cz)) continue;
-      // The crossing texture is a set of bars along U; a 18 m wide strip reads as zebra.
-      crossings.plane(cx, cz, GRID.roadWidth - 1, 4.6, ROAD_Y + 0.012, colorTriple(0xffffff), {
+      crossings.plane(cx, cz, GRID.roadWidth - 1, 4.6, ROAD_Y + 0.012, white, {
         rotY: arm.rot,
         uvScale: 4,
         repeatX: 1,
@@ -77,29 +81,45 @@ export function buildRoads(plan, textures, options = {}) {
   }
 
   // Pavement rings and kerbs around each block.
+  const sidewalk = GRID.sidewalk;
   for (const block of plan.blocks) {
     const w = block.x1 - block.x0;
     const d = block.z1 - block.z0;
-    const s = GRID.sidewalk;
-    if (w < s * 3 || d < s * 3) continue;
-    const tone = districtOf(block.district).palette.ground;
-    const shade = colorTriple(tone, 0.95 + random.range(0, 0.08));
+    if (w < sidewalk * 3 || d < sidewalk * 3) continue;
+    // Each block gets a slightly different slab tone so the grid does not look stamped.
+    const shade = colorTriple(districtOf(block.district).palette.ground, 0.95 + random.range(0, 0.08));
+
     // Four strips in a ring; they overlap at the corners, which is invisible.
-    pavements.plane(block.cx, block.z0 + s / 2, w, s, SIDEWALK_Y, shade, { uvScale: 4, repeatX: w / 4, repeatY: 1 });
-    pavements.plane(block.cx, block.z1 - s / 2, w, s, SIDEWALK_Y, shade, { uvScale: 4, repeatX: w / 4, repeatY: 1 });
-    pavements.plane(block.x0 + s / 2, block.cz, s, d, SIDEWALK_Y, shade, { uvScale: 4, repeatX: 1, repeatY: d / 4 });
-    pavements.plane(block.x1 - s / 2, block.cz, s, d, SIDEWALK_Y, shade, { uvScale: 4, repeatX: 1, repeatY: d / 4 });
+    pavements.plane(block.cx, block.z0 + sidewalk / 2, w, sidewalk, SIDEWALK_Y, shade, {
+      uvScale: 4,
+      repeatX: w / 4,
+      repeatY: 1,
+    });
+    pavements.plane(block.cx, block.z1 - sidewalk / 2, w, sidewalk, SIDEWALK_Y, shade, {
+      uvScale: 4,
+      repeatX: w / 4,
+      repeatY: 1,
+    });
+    pavements.plane(block.x0 + sidewalk / 2, block.cz, sidewalk, d, SIDEWALK_Y, shade, {
+      uvScale: 4,
+      repeatX: 1,
+      repeatY: d / 4,
+    });
+    pavements.plane(block.x1 - sidewalk / 2, block.cz, sidewalk, d, SIDEWALK_Y, shade, {
+      uvScale: 4,
+      repeatX: 1,
+      repeatY: d / 4,
+    });
 
     // Kerb faces along the four outside edges.
-    kerbs.beam(block.x0, block.z0, block.x1, block.z0, 0.7, KERB_TOP, 0, kerbColor, { uvScale: 2 });
-    kerbs.beam(block.x0, block.z1, block.x1, block.z1, 0.7, KERB_TOP, 0, kerbColor, { uvScale: 2 });
-    kerbs.beam(block.x0, block.z0, block.x0, block.z1, 0.7, KERB_TOP, 0, kerbColor, { uvScale: 2 });
-    kerbs.beam(block.x1, block.z0, block.x1, block.z1, 0.7, KERB_TOP, 0, kerbColor, { uvScale: 2 });
+    kerbs.beam(block.x0, block.z0, block.x1, block.z0, 0.7, KERB_TOP, 0, white, { uvScale: 2 });
+    kerbs.beam(block.x0, block.z1, block.x1, block.z1, 0.7, KERB_TOP, 0, white, { uvScale: 2 });
+    kerbs.beam(block.x0, block.z0, block.x0, block.z1, 0.7, KERB_TOP, 0, white, { uvScale: 2 });
+    kerbs.beam(block.x1, block.z0, block.x1, block.z1, 0.7, KERB_TOP, 0, white, { uvScale: 2 });
   }
 
   const materials = {
     asphalt: cityMaterial(textures.road()),
-    paint: cityMaterial(textures.asphalt()),
     crossings: cityMaterial(textures.crossing()),
     pavements: cityMaterial(textures.sidewalk()),
     kerbs: cityMaterial(textures.concrete(), { color: 0xcfc8b8 }),
@@ -138,46 +158,40 @@ export function buildHighway(plan, textures, colliders, options = {}) {
 
   for (const segment of plan.highway.segments) {
     deck.beam(segment.ax, segment.az, segment.bx, segment.bz, width, 1.1, height - 1.1, deckColor, { uvScale: 8 });
-    // Guard rails, a low wall on each side.
+
+    // Guard rails sit a little inside the deck edge, one on each side.
     const nx = -segment.dirZ;
     const nz = segment.dirX;
     const inset = width / 2 - 0.6;
-    rails.beam(
-      segment.ax + nx * inset,
-      segment.az + nz * inset,
-      segment.bx + nx * inset,
-      segment.bz + nz * inset,
-      0.7,
-      1.1,
-      height,
-      railColor,
-      { uvScale: 4 },
-    );
-    rails.beam(
-      segment.ax - nx * inset,
-      segment.az - nz * inset,
-      segment.bx - nx * inset,
-      segment.bz - nz * inset,
-      0.7,
-      1.1,
-      height,
-      railColor,
-      { uvScale: 4 },
-    );
+    for (const side of [1, -1]) {
+      rails.beam(
+        segment.ax + nx * inset * side,
+        segment.az + nz * inset * side,
+        segment.bx + nx * inset * side,
+        segment.bz + nz * inset * side,
+        0.7,
+        1.1,
+        height,
+        railColor,
+        { uvScale: 4 },
+      );
+    }
 
-    // Pillars every ~46 m, set just outside the deck so they read as a viaduct.
+    // Pillars every ~46 m; the deck reads as a viaduct from the street below.
     const count = Math.max(1, Math.round(segment.length / 46));
     for (let i = 0; i < count; i += 1) {
       const t = (i + 0.5) / count;
       const x = segment.ax + (segment.bx - segment.ax) * t;
       const z = segment.az + (segment.bz - segment.az) * t;
+      // A pillar in the channel or through a building is simply skipped: the deck spans.
       if (isWaterAt(x, z)) continue;
-      // Do not plant a pillar through a building; the deck simply spans it.
       if (colliders.blockedAt(x, z, 2)) continue;
+
       pillars.box(x, 0, z, 3.2, height - 1.1, 3.2, pillarColor, { uvScale: 6 });
       pillars.box(x, height - 1.5, z, 5.2, 0.5, 5.2, pillarColor, { uvScale: 4 });
       colliders.addBoxAt(x, z, 1.7, 1.7, height - 1.1, 'highway-pillar', { x, z });
-      // A lantern on the rail every other pillar.
+
+      // A lantern post on the rail every other pillar.
       if (i % 2 === 0) {
         const lampX = x + nx * inset;
         const lampZ = z + nz * inset;
@@ -187,12 +201,18 @@ export function buildHighway(plan, textures, colliders, options = {}) {
     }
   }
 
-  // Two ramps, one on the east side and one on the west, each a sequence of sloped
-  // quads walking the deck down to the street.
+  // Two ramps, one east and one west, each a walk of sloped deck quads down to the street.
   const makeRamp = (x0, z0, x1, z1, fromY, toY) => {
     const steps = 10;
     const dirX = (x1 - x0) / steps;
     const dirZ = (z1 - z0) / steps;
+    // The half-width offset, perpendicular to the ramp direction.
+    const nx = -(z1 - z0);
+    const nz = x1 - x0;
+    const length = Math.hypot(nx, nz) || 1;
+    const halfX = (nx / length) * (width / 2);
+    const halfZ = (nz / length) * (width / 2);
+
     for (let i = 0; i < steps; i += 1) {
       const ax = x0 + dirX * i;
       const az = z0 + dirZ * i;
@@ -200,24 +220,18 @@ export function buildHighway(plan, textures, colliders, options = {}) {
       const bz = z0 + dirZ * (i + 1);
       const ay = fromY + ((toY - fromY) * i) / steps;
       const by = fromY + ((toY - fromY) * (i + 1)) / steps;
-      const hw = width / 2;
-      const nx = -(z1 - z0);
-      const nz = x1 - x0;
-      const len = Math.hypot(nx, nz) || 1;
-      const ux = (nx / len) * hw;
-      const uz = (nz / len) * hw;
+
       deck.quad(
-        [ax + ux, ay, az + uz],
-        [bx + ux, by, bz + uz],
-        [bx - ux, by, bz - uz],
-        [ax - ux, ay, az - uz],
+        [ax + halfX, ay, az + halfZ],
+        [bx + halfX, by, bz + halfZ],
+        [bx - halfX, by, bz - halfZ],
+        [ax - halfX, ay, az - halfZ],
         [0, 1, 0],
         deckColor,
         [[0, 0], [1, 0], [1, 1], [0, 1]],
       );
-      // Outer edge beams.
-      rails.beam(ax + ux, az + uz, bx + ux, bz + uz, 0.6, 1, ay, railColor, { uvScale: 4 });
-      rails.beam(ax - ux, az - uz, bx - ux, bz - uz, 0.6, 1, ay, railColor, { uvScale: 4 });
+      rails.beam(ax + halfX, az + halfZ, bx + halfX, bz + halfZ, 0.6, 1, ay, railColor, { uvScale: 4 });
+      rails.beam(ax - halfX, az - halfZ, bx - halfX, bz - halfZ, 0.6, 1, ay, railColor, { uvScale: 4 });
     }
   };
   makeRamp(676, 300, 760, 210, HIGHWAY.height, 0.1);

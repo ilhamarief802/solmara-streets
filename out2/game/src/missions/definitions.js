@@ -1,14 +1,18 @@
-// The story, as data. Five jobs in order, each a list of steps the mission system knows
-// how to run: reach a place (on foot or by car), catch a stolen car, clear a warehouse,
-// pass five checkpoints against the clock, and finish the boss on the Neon Strip. All of
-// the writing lives here so the runtime stays a small machine that reads it.
+// The story, as data. Five jobs in order, each a list of steps the mission system knows how
+// to run: reach a place (on foot or by car), catch a stolen car, clear a warehouse, pass
+// five checkpoints against the clock, and finish the boss on the Neon Strip. All of the
+// writing lives here so the runtime stays a small machine that reads it.
 //
 // Step types:
 //   goto        reach `marker` within `radius` (optionally by car)
 //   chase       catch the car spawned at `spawn` (radius metres between bumpers)
 //   killAll     clear every thug spawned from `spawns` with this step's tag
+//               (each spawn may carry `heading` and `color`)
 //   checkpoints pass `points` in order, against one clock
 //   escape      be clean (wanted 0) after the heat this step stirs up
+//
+// Every step may carry `time` (seconds before it fails) and `hint` (the last line of the
+// HUD mission card). All coordinates are in the plan's world metres.
 
 export const MISSIONS = [
   {
@@ -178,5 +182,5 @@ export const SHOP = {
   name: 'Solmara Motors',
 };
 
-/** Story order, and the reward a first clean completion pays. */
+/** Story order; the mission system walks this list to find the next job. */
 export const MISSION_ORDER = MISSIONS.map((mission) => mission.id);
