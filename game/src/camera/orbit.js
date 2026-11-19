@@ -1,41 +1,43 @@
-// Third-person camera rig. The mouse turns it (pointer lock), the wheel changes the
-// boom length, and the rig answers to the city: a camera that would sit inside a wall is
-// pulled in along its boom until the shot is clear, and never drops under the pavement.
-// On foot the character turns to the camera; in a car the rig settles behind the boot and
-// damps back there after the mouse has had its look. V switches to a close, first-person
-// view that keeps the same yaw and pitch.
+// Third-person camera rig. The mouse turns it (pointer lock), the wheel changes the boom
+// length, and the rig answers to the city: a camera that would sit inside a wall is pulled
+// in along its boom until the shot is clear, and never drops under the pavement. On foot
+// the character turns to the camera; in a car the rig settles behind the boot and damps
+// back there after the mouse has had its look. V switches to a close, first-person view
+// that keeps the same yaw and pitch.
 
-import { clamp, damp, dampAngle, angleDelta } from '../core/math.js';
+import { clamp, damp, dampAngle } from '../core/math.js';
 
 const MIN_DISTANCE = 1.4;
 const MAX_DISTANCE = 11;
 const DEFAULT_DISTANCE = 5.2;
 const PITCH_MIN = -0.5;
 const PITCH_MAX = 1.05;
+const SHOULDER = 0.28;
 
 /** Slab test: the entry distance of a ray into an axis-aligned box, or null. */
 function rayBox(origin, dir, box, maxT) {
   let tmin = 0;
   let tmax = maxT;
-  const axes = [
+  const slabs = [
     [origin.x, dir.x, box.minX, box.maxX],
     [origin.y, dir.y, 0, box.top],
     [origin.z, dir.z, box.minZ, box.maxZ],
   ];
-  for (const [start, step, min, max] of axes) {
+  for (const [start, step, min, max] of slabs) {
     if (Math.abs(step) < 1e-6) {
+      // Parallel to this pair of planes: miss entirely if outside the slab.
       if (start < min || start > max) return null;
       continue;
     }
-    let t1 = (min - start) / step;
-    let t2 = (max - start) / step;
-    if (t1 > t2) {
-      const swap = t1;
-      t1 = t2;
-      t2 = swap;
+    let near = (min - start) / step;
+    let far = (max - start) / step;
+    if (near > far) {
+      const swap = near;
+      near = far;
+      far = swap;
     }
-    tmin = Math.max(tmin, t1);
-    tmax = Math.min(tmax, t2);
+    tmin = Math.max(tmin, near);
+    tmax = Math.min(tmax, far);
     if (tmin > tmax) return null;
   }
   return tmin;
@@ -86,23 +88,24 @@ export class OrbitCamera {
   }
 
   update(dt, context = {}) {
-    const player = this.player;
+    const { player } = this;
     const car = context.car ?? player.car ?? null;
     const driving = Boolean(car);
     const step = Math.min(dt, 0.1);
+    const input = this.input;
 
     // ------------------------------------------------------------ look input
-    const look = this.input ? this.input.consumeMouseDelta() : { x: 0, y: 0 };
+    const look = input ? input.consumeMouseDelta() : { x: 0, y: 0 };
     if (Math.abs(look.x) + Math.abs(look.y) > 1e-5) this.timeSinceLook = 0;
     else this.timeSinceLook += step;
 
-    if (this.input?.isDown('cameraLeft')) this.yaw += step * 1.8;
-    if (this.input?.isDown('cameraRight')) this.yaw -= step * 1.8;
-    if (this.input?.isDown('lookUp')) this.pitch = clamp(this.pitch - step * 1.1, PITCH_MIN, PITCH_MAX);
-    if (this.input?.isDown('lookDown')) this.pitch = clamp(this.pitch + step * 1.1, PITCH_MIN, PITCH_MAX);
+    if (input?.isDown('cameraLeft')) this.yaw += step * 1.8;
+    if (input?.isDown('cameraRight')) this.yaw -= step * 1.8;
+    if (input?.isDown('lookUp')) this.pitch = clamp(this.pitch - step * 1.1, PITCH_MIN, PITCH_MAX);
+    if (input?.isDown('lookDown')) this.pitch = clamp(this.pitch + step * 1.1, PITCH_MIN, PITCH_MAX);
 
     if (driving) {
-      // In a car the mouse is a look-around offset that decays when it is let go.
+      // In a car the mouse is a look-around offset that decays once it is let go.
       this.orbitOffset = clamp(this.orbitOffset - look.x, -1.4, 1.4);
       this.orbitOffset = damp(this.orbitOffset, 0, this.timeSinceLook > 1.1 ? 2.4 : 0.15, step);
       this.yaw = dampAngle(this.yaw, car.heading + this.orbitOffset, 3.4, step);
@@ -113,8 +116,8 @@ export class OrbitCamera {
       this.orbitOffset = 0;
     }
 
-    // Mouse wheel: zoom the boom. Input only reports wheel while locked.
-    const wheel = this.input?.mouse?.wheel ?? 0;
+    // Mouse wheel: zoom the boom. Input only reports the wheel while the pointer is locked.
+    const wheel = input?.mouse?.wheel ?? 0;
     if (wheel) this.zoom = clamp(this.zoom + wheel * 0.8, MIN_DISTANCE, MAX_DISTANCE);
 
     // ------------------------------------------------------------ follow target
@@ -131,12 +134,11 @@ export class OrbitCamera {
     this.distance = damp(this.distance, targetDistance, 9, step);
 
     // ------------------------------------------------------------ place
-    const yaw = this.yaw;
-    const pitch = this.pitch;
+    const { yaw, pitch } = this;
     const cosPitch = Math.cos(pitch);
     const forward = { x: Math.sin(yaw) * cosPitch, y: -Math.sin(pitch), z: Math.cos(yaw) * cosPitch };
     const up = driving ? 0.5 : 0.32;
-    const shoulder = this.firstPerson ? 0 : driving ? 0 : 0.28;
+    const shoulder = this.firstPerson || driving ? 0 : SHOULDER;
     const right = { x: Math.cos(yaw), z: -Math.sin(yaw) };
 
     let px = this.anchor.x - forward.x * this.distance + right.x * shoulder;
@@ -150,24 +152,22 @@ export class OrbitCamera {
       pz = player.position.z + Math.cos(yaw) * 0.12;
     } else {
       // Boom collision: pull in to the first wall between the head and the camera.
-      const origin = { x: this.anchor.x, y: this.anchor.y, z: this.anchor.z };
-      const delta = { x: px - origin.x, y: py - origin.y, z: pz - origin.z };
-      const length = Math.hypot(delta.x, delta.y, delta.z) || 1;
-      const dir = { x: delta.x / length, y: delta.y / length, z: delta.z / length };
-      const midX = (origin.x + px) / 2;
-      const midZ = (origin.z + pz) / 2;
+      const origin = this.anchor;
+      const dx = px - origin.x;
+      const dy = py - origin.y;
+      const dz = pz - origin.z;
+      const length = Math.hypot(dx, dy, dz) || 1;
+      const dir = { x: dx / length, y: dy / length, z: dz / length };
       let nearest = 1;
-      for (const box of this.world.colliders.near(midX, midZ, length * 0.6 + 1)) {
+      for (const box of this.world.colliders.near((origin.x + px) / 2, (origin.z + pz) / 2, length * 0.6 + 1)) {
         const hit = rayBox(origin, dir, box, length);
-        if (hit !== null) {
-          const t = clamp((hit - 0.35) / length, 0.08, 1);
-          if (t < nearest) nearest = t;
-        }
+        if (hit === null) continue;
+        nearest = Math.min(nearest, clamp((hit - 0.35) / length, 0.08, 1));
       }
       if (nearest < 1) {
-        px = origin.x + delta.x * nearest;
-        py = origin.y + delta.y * nearest;
-        pz = origin.z + delta.z * nearest;
+        px = origin.x + dx * nearest;
+        py = origin.y + dy * nearest;
+        pz = origin.z + dz * nearest;
       }
     }
 
@@ -175,11 +175,11 @@ export class OrbitCamera {
     const ground = this.world.walk.surfaceAt(px, pz);
     if (py < ground.y + 0.35) py = ground.y + 0.35;
 
-    // Small impact shake, decaying fast.
+    // A small impact shake, decaying fast.
     if (this.shake > 0.001) {
-      const wobble = this.shake;
-      px += Math.sin(performance.now() * 0.05) * wobble * 0.18;
-      py += Math.cos(performance.now() * 0.043) * wobble * 0.12;
+      const now = performance.now();
+      px += Math.sin(now * 0.05) * this.shake * 0.18;
+      py += Math.cos(now * 0.043) * this.shake * 0.12;
       this.shake = damp(this.shake, 0, 8, step);
     }
 
@@ -187,19 +187,18 @@ export class OrbitCamera {
     this._camPos.y = py;
     this._camPos.z = pz;
 
-    // The look target sits ahead of the anchor a touch at speed, so the road leads.
-    const speedLead = car ? clamp(Math.abs(car.speed) * 0.16, 0, 5) : 0;
     if (this.firstPerson) {
       this._target.x = px + forward.x * 4;
       this._target.y = py + forward.y * 4;
       this._target.z = pz + forward.z * 4;
     } else {
-      // In a car the camera looks down the bonnet, not down the old mouse yaw: the
-      // target leads along the car's heading so the road opens up before the turn.
-      const lookHeading = driving ? car.heading : this.yaw;
-      this._target.x = this.anchor.x + Math.sin(lookHeading) * speedLead;
+      // In a car the camera looks down the bonnet, not down the old mouse yaw: the target
+      // leads along the car's heading so the road opens up before the turn.
+      const lead = car ? clamp(Math.abs(car.speed) * 0.16, 0, 5) : 0;
+      const lookHeading = driving ? car.heading : yaw;
+      this._target.x = this.anchor.x + Math.sin(lookHeading) * lead;
       this._target.y = this.anchor.y + 0.1;
-      this._target.z = this.anchor.z + Math.cos(lookHeading) * speedLead;
+      this._target.z = this.anchor.z + Math.cos(lookHeading) * lead;
     }
 
     this.camera.position.set(px, py, pz);

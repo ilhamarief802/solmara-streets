@@ -15,6 +15,8 @@ const SPAWN_MAX = 230;
 const SIGNAL_CYCLE = 26;
 const SIGNAL_GREEN = 11;
 const SIGNAL_AMBER = 3.2;
+/** How long a car may stand still with a clear road before it is moved on. */
+const STUCK_LIMIT = 13;
 
 const CAR_COLORS = [
   0xb8bcc0, 0x2f3c4a, 0x7a232b, 0x24585a, 0xcbb073, 0x3b3f46, 0xe4ded0,
@@ -33,6 +35,12 @@ function pickType(random) {
   return 'sedan';
 }
 
+function approach(value, target, step) {
+  if (value < target) return Math.min(value + step, target);
+  if (value > target) return Math.max(value - step, target);
+  return value;
+}
+
 export class TrafficSystem {
   constructor({ world, seed = 1, player = null, vehicles = null, count = COUNT }) {
     this.world = world;
@@ -49,8 +57,9 @@ export class TrafficSystem {
     this.brakeLights = 0;
 
     // Lane bookkeeping: which way each lane leaves and arrives, and where lanes begin.
+    this.lanes = world.plan.lanes;
     this.lanesFrom = new Map();
-    for (const lane of world.plan.lanes) {
+    for (const lane of this.lanes) {
       lane.startNode = lane.offset > 0 ? lane.edge.a : lane.edge.b;
       lane.endNode = lane.offset > 0 ? lane.edge.b : lane.edge.a;
       lane.axis = lane.edge.axis;
@@ -60,7 +69,6 @@ export class TrafficSystem {
       if (list) list.push(lane);
       else this.lanesFrom.set(lane.endNode, [lane]);
     }
-    this.lanes = world.plan.lanes;
     this.fill();
   }
 
@@ -77,7 +85,7 @@ export class TrafficSystem {
     return this.cars.length;
   }
 
-  /** Changes the target fleet size without reseeding the world. Menus call this. */
+  /** Changes the target fleet size without reseeding the world. The menus call this. */
   setCount(count) {
     const next = Math.max(0, Math.min(48, Math.round(count)));
     this.count = next;
@@ -86,7 +94,7 @@ export class TrafficSystem {
     return this.cars.length;
   }
 
-  /** Depending on distance to the player, the point new cars appear around. */
+  /** The point new cars appear around: wherever the player is. */
   setFocus(x, z) {
     this.focusPoint.x = x;
     this.focusPoint.z = z;
@@ -103,7 +111,7 @@ export class TrafficSystem {
     this.stats.spawns += this.cars.length;
   }
 
-  /** A lane near the focus, far enough away to appear unseen, with room on it. */
+  /** A lane near the focus, far enough away to appear unseen. */
   pickSpawnLane() {
     for (let attempt = 0; attempt < 26; attempt += 1) {
       const lane = this.random.pick(this.lanes);
@@ -120,13 +128,13 @@ export class TrafficSystem {
     const along = s ?? this.random.range(6, Math.max(8, chosen.length - 8));
     const x = chosen.from.x + chosen.dirX * along;
     const z = chosen.from.z + chosen.dirZ * along;
+
     // Keep a gap from anything already on this stretch.
     for (const other of this.cars) {
-      if (other.lane !== chosen) continue;
-      if (Math.abs(other.s - along) < 12) return null;
+      if (other.lane === chosen && Math.abs(other.s - along) < 12) return null;
     }
+
     const type = pickType(this.random);
-    const color = TYPE_PAINT[type] ?? this.random.pick(CAR_COLORS);
     return {
       id: `traffic-${this.stats.spawns + this.cars.length + 1}-${this.random.int(0, 9999)}`,
       lane: chosen,
@@ -135,7 +143,7 @@ export class TrafficSystem {
       factor: this.random.range(0.85, 1.08),
       desired: chosen.speed * this.random.range(0.85, 1.08),
       type,
-      color,
+      color: TYPE_PAINT[type] ?? this.random.pick(CAR_COLORS),
       x,
       z,
       y: 0.09,
@@ -155,9 +163,9 @@ export class TrafficSystem {
     const fz = Math.cos(heading);
     let best = null;
     let bestScore = Infinity;
+
     for (const lane of this.lanes) {
-      const dot = lane.dirX * fx + lane.dirZ * fz;
-      if (dot < 0.7) continue;
+      if (lane.dirX * fx + lane.dirZ * fz < 0.7) continue;
       const px = x - lane.from.x;
       const pz = z - lane.from.z;
       const along = px * lane.dirX + pz * lane.dirZ;
@@ -187,10 +195,9 @@ export class TrafficSystem {
     for (let index = 0; index < count; index += 1) {
       const s = clamp(found.along + distance + index * spacing, 4, found.lane.length - 10);
       const car = this.makeCar(found.lane, s);
-      if (car) {
-        this.cars.push(car);
-        placed += 1;
-      }
+      if (!car) continue;
+      this.cars.push(car);
+      placed += 1;
     }
     return placed;
   }
@@ -200,6 +207,7 @@ export class TrafficSystem {
     const signals = this.world.props?.signals;
     const elapsed = signals ? signals.elapsed : this.elapsed;
     const offset = ((node.i * 3 + node.j * 5) % 26) * 0.9;
+    // Cross traffic runs half a cycle out of phase.
     const phase = (elapsed + offset + (axis === 'v' ? SIGNAL_CYCLE / 2 : 0)) % SIGNAL_CYCLE;
     if (phase < SIGNAL_GREEN) return 'green';
     if (phase < SIGNAL_GREEN + SIGNAL_AMBER) return 'amber';
@@ -210,25 +218,22 @@ export class TrafficSystem {
   chooseNext(lane) {
     const options = this.lanesFrom.get(lane.endNode);
     if (!options || !options.length) return null;
-    let total = 0;
+
     const weighted = [];
+    let total = 0;
     for (const option of options) {
+      if (option === lane) continue;
       const dot = option.dirX * lane.dirX + option.dirZ * lane.dirZ;
       if (dot < -0.55) continue; // no U-turns at a junction
-      if (option === lane) continue;
       const cross = lane.dirX * option.dirZ - lane.dirZ * option.dirX;
+      // Straight on is the common case; a right turn beats a left; bridges are rarer.
       let weight = dot > 0.7 ? 5 : cross < 0 ? 2.4 : 1.6;
       if (option.edge.bridge) weight *= 0.5;
       weighted.push({ lane: option, weight });
       total += weight;
     }
     if (!weighted.length) return null;
-    let roll = this.random.float() * total;
-    for (const entry of weighted) {
-      roll -= entry.weight;
-      if (roll <= 0) return entry.lane;
-    }
-    return weighted[weighted.length - 1].lane;
+    return pickWeighted(this.random, weighted, total).lane;
   }
 
   /** A gap, in metres, to the nearest thing in this car's path. */
@@ -238,6 +243,7 @@ export class TrafficSystem {
     const rx = Math.cos(car.heading);
     const rz = -Math.sin(car.heading);
     let gap = Infinity;
+
     const consider = (x, z, halfWidth) => {
       const dx = x - car.x;
       const dz = z - car.z;
@@ -247,6 +253,7 @@ export class TrafficSystem {
       if (side > halfWidth + 1.55) return;
       if (ahead < gap) gap = ahead;
     };
+
     for (const other of this.cars) {
       if (other === car) continue;
       if (Math.abs(other.x - car.x) > 30 || Math.abs(other.z - car.z) > 30) continue;
@@ -264,15 +271,15 @@ export class TrafficSystem {
     this.respawnClock -= dt;
 
     let stops = 0;
-    for (let index = 0; index < this.cars.length; index += 1) {
-      const car = this.cars[index];
+    for (const car of this.cars) {
       this.stepCar(car, dt);
       if (car.speed < 0.35) stops += 1;
-      // A car that has sat at the front of a lane for too long is posted back out to a
-      // fresh lane: a junction deadlock clears itself instead of growing a queue.
+
+      // A car that has sat at the front of a lane for too long is posted out to a fresh
+      // lane: a junction deadlock clears itself instead of growing a queue.
       if (Math.abs(car.speed) < 0.25) car.stuck = (car.stuck ?? 0) + dt;
       else car.stuck = 0;
-      if ((car.stuck ?? 0) > 13 && this.pathGap(car) > 10) {
+      if (car.stuck > STUCK_LIMIT && this.pathGap(car) > 10) {
         const lane = this.pickSpawnLane();
         if (lane) {
           car.lane = lane;
@@ -296,23 +303,19 @@ export class TrafficSystem {
   stepCar(car, dt) {
     const lane = car.lane;
     const remaining = lane.length - car.s;
-    const next = car.nextLane ?? this.chooseNext(lane);
-    if (!car.nextLane) car.nextLane = next;
+    if (!car.nextLane) car.nextLane = this.chooseNext(lane);
 
     // Turning costs speed: the sharper the turn, the slower the entry.
     let desired = car.desired;
-    if (next) {
-      const dot = next.dirX * lane.dirX + next.dirZ * lane.dirZ;
+    const nextLane = car.nextLane;
+    if (nextLane) {
+      const dot = nextLane.dirX * lane.dirX + nextLane.dirZ * lane.dirZ;
       if (dot < 0.72) desired = Math.min(desired, dot < 0.2 ? 5.6 : 7.6);
     }
 
-    // The car or body ahead.
+    // The car or body ahead, and a stop queue whose tail is out of sight.
     const gap = this.pathGap(car);
-    if (gap < 18) {
-      const allowed = Math.sqrt(Math.max(0, (gap - 4.2) * 3.4));
-      if (allowed < desired) desired = Math.max(0, allowed);
-    }
-    // A stopped queue is a stop, even if its tail is out of sight.
+    if (gap < 18) desired = Math.max(0, Math.min(desired, Math.sqrt(Math.max(0, (gap - 4.2) * 3.4))));
     if (gap < 3.4) desired = 0;
     car.braking = desired < car.speed - 0.5;
 
@@ -326,9 +329,9 @@ export class TrafficSystem {
       }
     }
 
-    const rate = desired < car.speed ? 9.5 : 3.4;
-    car.speed = approach(car.speed, desired, rate * dt);
-    car.s = car.s + car.speed * dt;
+    // Braking is quicker than accelerating, as in a real car.
+    car.speed = approach(car.speed, desired, (desired < car.speed ? 9.5 : 3.4) * dt);
+    car.s += car.speed * dt;
 
     // Lane change at the junction.
     let guard = 0;
@@ -336,6 +339,7 @@ export class TrafficSystem {
       guard += 1;
       const following = car.nextLane ?? this.chooseNext(car.lane);
       if (!following) {
+        // A dead end: pick up somewhere else entirely.
         car.s = 0;
         car.lane = this.pickSpawnLane();
         car.nextLane = null;
@@ -347,25 +351,24 @@ export class TrafficSystem {
     }
     if (car.s < 0) car.s = 0;
 
-    const cl = car.lane;
-    car.x = cl.from.x + cl.dirX * car.s;
-    car.z = cl.from.z + cl.dirZ * car.s;
-    car.heading = Math.atan2(cl.dirX, cl.dirZ);
+    const current = car.lane;
+    car.x = current.from.x + current.dirX * car.s;
+    car.z = current.from.z + current.dirZ * car.s;
+    car.heading = Math.atan2(current.dirX, current.dirZ);
     car.y = 0.09;
     car.wheelSpin += car.speed * dt * 2.4;
-    car.desired = cl.speed * car.factor;
+    car.desired = current.speed * car.factor;
   }
 
   stream() {
     const focus = this.focusPoint;
     for (let index = this.cars.length - 1; index >= 0; index -= 1) {
       const car = this.cars[index];
-      const distance = Math.hypot(car.x - focus.x, car.z - focus.z);
-      if (distance > DESPAWN) {
-        this.cars.splice(index, 1);
-        this.stats.despawns += 1;
-      }
+      if (Math.hypot(car.x - focus.x, car.z - focus.z) <= DESPAWN) continue;
+      this.cars.splice(index, 1);
+      this.stats.despawns += 1;
     }
+
     let guard = 0;
     while (this.cars.length < this.count && guard < 40) {
       guard += 1;
@@ -379,10 +382,9 @@ export class TrafficSystem {
     let bestDistance = maxDistance;
     for (const car of this.cars) {
       const distance = Math.hypot(car.x - x, car.z - z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = { car, distance };
-      }
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = { car, distance };
     }
     return best;
   }
@@ -414,8 +416,12 @@ export class TrafficSystem {
   }
 }
 
-function approach(value, target, step) {
-  if (value < target) return Math.min(value + step, target);
-  if (value > target) return Math.max(value - step, target);
-  return value;
+/** One weighted pick from an already-totalled list of { lane, weight }. */
+function pickWeighted(random, entries, total) {
+  let roll = random.float() * total;
+  for (const entry of entries) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry;
+  }
+  return entries[entries.length - 1];
 }

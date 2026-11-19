@@ -17,19 +17,22 @@ const FLEE_SPEED = 5.2;
 const DESPAWN = 300;
 const SPAWN_MIN = 9;
 const SPAWN_MAX = 165;
+/** Chance a pedestrian wears a hat rather than bare hair. */
+const HAT_CHANCE = 0.45;
 
 const JACKETS = [0xd9483d, 0x2f6f8f, 0x3f7d59, 0xc9a24a, 0x8a5a9a, 0xd7d2c6, 0x27313f, 0xb8663a, 0x5f8fd1, 0x9a3f5c];
 const PANTS = [0x27313f, 0x3a3f46, 0x5a5148, 0x24303a, 0x6f6a5c, 0x1c2026];
 const SKINS = [0xc58a5a, 0x8a5a3a, 0xe0b088, 0x6b4428, 0xb87a4e, 0xd9a97e];
 const HATS = [0x2f8f8a, 0x8f2f3a, 0x2a3a4a, 0xd8c28a, 0x3a5a3a];
 
-/** A box with its top face at y = 0, so a limb pivots where it hangs from. */
+/** A box whose top face is at y = 0, so a limb pivots where it hangs from. */
 function hangingBox(width, height, depth) {
   const geometry = new THREE.BoxGeometry(width, height, depth);
   geometry.translate(0, -height / 2, 0);
   return geometry;
 }
 
+/** A box standing on y = 0, optionally lifted, for a torso or a head. */
 function standingBox(width, height, depth, offsetY = 0) {
   const geometry = new THREE.BoxGeometry(width, height, depth);
   geometry.translate(0, height / 2 + offsetY, 0);
@@ -71,6 +74,8 @@ export class PedestrianSystem {
       armR: this.makeMesh(this.geometry.arm, material(), 'peds-arm-r'),
     };
 
+    // Scratch objects: draw() builds a few hundred matrices per frame and none of these
+    // allocations need to happen twice.
     this.matrix = new THREE.Matrix4();
     this.position = new THREE.Vector3();
     this.scale = new THREE.Vector3();
@@ -113,7 +118,7 @@ export class PedestrianSystem {
     this.focus.z = z;
   }
 
-  /** Changes the crowd size without reseeding the pavements. Menus call this. */
+  /** Changes the crowd size without reseeding the pavements. The menus call this. */
   setCount(count) {
     const next = Math.max(0, Math.min(CAPACITY, Math.round(count)));
     this.count = next;
@@ -131,14 +136,14 @@ export class PedestrianSystem {
       if (distance < SPAWN_MIN || distance > SPAWN_MAX) continue;
       return block;
     }
+    // Nothing in the window (the player is off the grid): take the nearest block.
     let best = this.blocks[0];
     let bestDistance = Infinity;
     for (const block of this.blocks) {
       const distance = Math.hypot(block.cx - this.focus.x, block.cz - this.focus.z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = block;
-      }
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = block;
     }
     return best;
   }
@@ -147,6 +152,7 @@ export class PedestrianSystem {
     const block = chosenBlock ?? this.pickBlock();
     if (!block) return null;
     const corners = this.world.walk.ring(block);
+
     // Never appear on top of the player: try corners until one is a few steps away.
     let corner = this.random.int(0, 3);
     for (let attempt = 0; attempt < 4; attempt += 1) {
@@ -157,6 +163,7 @@ export class PedestrianSystem {
     const start = corners[corner];
     const nextIndex = (corner + 1) % 4;
     const hatRoll = this.random.float();
+
     return {
       id: `ped-${this.stats.spawned + this.peds.length + 1}`,
       block,
@@ -174,7 +181,7 @@ export class PedestrianSystem {
       jacket: this.random.pick(JACKETS),
       pants: this.random.pick(PANTS),
       skin: this.random.pick(SKINS),
-      hat: hatRoll < 0.45 ? this.random.pick(HATS) : null,
+      hat: hatRoll < HAT_CHANCE ? this.random.pick(HATS) : null,
       health: 100,
       dead: false,
       deadTimer: 0,
@@ -187,21 +194,24 @@ export class PedestrianSystem {
 
   /**
    * Adds peds on the pavements around a point, walking those blocks' rings. The street
-   * shot uses this to guarantee a living crowd in the frame instead of hoping the seeded
-   * fill happened to put one there.
+   * shot uses this to guarantee a living crowd in the frame.
    */
   placeAround(x, z, count = 6, radius = 50) {
     const walk = this.world.walk;
-    const block = walk.blockContaining(x, z)
-      ?? this.blocks.find((candidate) => Math.hypot(candidate.cx - x, candidate.cz - z) < radius)
-      ?? this.pickBlock();
+    const block =
+      walk.blockContaining(x, z) ??
+      this.blocks.find((candidate) => Math.hypot(candidate.cx - x, candidate.cz - z) < radius) ??
+      this.pickBlock();
     if (!block) return 0;
+
     const corners = walk.ring(block);
     const edges = corners.map((from, index) => {
       const to = corners[(index + 1) % 4];
       return { from, to, length: Math.hypot(to.x - from.x, to.z - from.z) };
     });
     const perimeter = edges.reduce((sum, edge) => sum + edge.length, 0);
+
+    // Walk the ring from the corner nearest the player, measured in metres of perimeter.
     const nearest = walk.nearestCorner(block, x, z);
     let start = 0;
     for (let index = 0; index < nearest.corner; index += 1) start += edges[index].length;
@@ -289,18 +299,18 @@ export class PedestrianSystem {
     ped.fleeCooldown = 3.4;
   }
 
-  /** Picks a direction for a fleeing ped that stays on pavement; null when boxed in. */
+  /** A direction for a fleeing ped that stays on pavement; null when boxed in. */
   fleeDirection(ped, step) {
     const walk = this.world.walk;
     const base = Math.atan2(ped.threat.x, ped.threat.z);
+    // Try straight away from the threat first, then wider and wider angles.
     const offsets = [0, 0.5, -0.5, 1.0, -1.0, 1.6, -1.6, Math.PI];
     for (const offset of offsets) {
       const angle = base + offset;
       const nx = ped.x + Math.sin(angle) * step;
       const nz = ped.z + Math.cos(angle) * step;
+      if (this.world.colliders?.blockedAt?.(nx, nz, 0.24)) continue;
       const surface = walk.surfaceAt(nx, nz);
-      const solid = this.world.colliders?.blockedAt?.(nx, nz, 0.24);
-      if (solid) continue;
       if (surface.kind === 'pavement') return { x: nx, z: nz };
       // A ped already in the crossing may keep running along it.
       if (ped.mode === 'crossing' && surface.kind === 'road') return { x: nx, z: nz };
@@ -345,16 +355,15 @@ export class PedestrianSystem {
         const dz = car.z - ped.z;
         const distanceSq = dx * dx + dz * dz;
         if (distanceSq > 100) continue;
-        const fx = Math.sin(car.heading);
-        const fz = Math.cos(car.heading);
         // Positive when the pedestrian is in front of the car, not behind it.
-        const ahead = (dx * fx + dz * fz) / Math.sqrt(distanceSq || 1);
+        const ahead = (dx * Math.sin(car.heading) + dz * Math.cos(car.heading)) / Math.sqrt(distanceSq || 1);
         if (ahead < -0.2) {
           this.startle(ped, car.x, car.z);
           break;
         }
       }
     }
+
     const player = this.player;
     if (player && player.mode === 'foot' && player.speed > 5.5) {
       const dx = player.position.x - ped.x;
@@ -364,55 +373,51 @@ export class PedestrianSystem {
     if (ped.fleeTimer > 0) ped.fleeTimer -= dt;
   }
 
+  /** Rejoins the pavement ring at the nearest corner and resumes walking. */
+  settle(ped) {
+    const block = this.world.walk.blockContaining(ped.x, ped.z) ?? ped.block;
+    const corners = this.world.walk.ring(block);
+    const nearest = this.world.walk.nearestCorner(block, ped.x, ped.z);
+    ped.block = block;
+    ped.corner = nearest.corner;
+    ped.x = corners[nearest.corner].x;
+    ped.z = corners[nearest.corner].z;
+    const next = (nearest.corner + 1) % 4;
+    ped.nextCorner = next;
+    ped.nextBlock = block;
+    ped.target = corners[next];
+    ped.mode = 'ring';
+    ped.settled = 1;
+  }
+
   stepPed(ped, dt) {
     if (ped.fleeTimer > 0) {
       const next = this.fleeDirection(ped, FLEE_SPEED * dt);
-      if (next) {
-        ped.heading = dampAngle(ped.heading, Math.atan2(next.x - ped.x, next.z - ped.z), 12, dt);
-        ped.x = next.x;
-        ped.z = next.z;
-        ped.speed = FLEE_SPEED;
-        ped.phase += dt * 12;
-        ped.mode = 'flee';
+      if (!next) {
+        ped.speed = 0;
         return;
       }
-      ped.speed = 0;
+      ped.heading = dampAngle(ped.heading, Math.atan2(next.x - ped.x, next.z - ped.z), 12, dt);
+      ped.x = next.x;
+      ped.z = next.z;
+      ped.speed = FLEE_SPEED;
+      ped.phase += dt * 12;
+      ped.mode = 'flee';
       return;
     }
 
-    if (ped.mode === 'flee') {
-      // Calm down and rejoin the ring: snap to the nearest ring corner, then walk it.
-      const block = this.world.walk.blockContaining(ped.x, ped.z) ?? ped.block;
-      ped.block = block;
-      const corners = this.world.walk.ring(block);
-      let best = 0;
-      let bestDistance = Infinity;
-      for (let index = 0; index < corners.length; index += 1) {
-        const distance = Math.hypot(corners[index].x - ped.x, corners[index].z - ped.z);
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          best = index;
-        }
-      }
-      ped.corner = best;
-      ped.x = corners[best].x;
-      ped.z = corners[best].z;
-      const next = (best + 1) % 4;
-      ped.nextCorner = next;
-      ped.nextBlock = block;
-      ped.target = corners[next];
-      ped.mode = 'ring';
-      ped.settled = 1;
-    }
+    if (ped.mode === 'flee') this.settle(ped);
 
     const dx = ped.target.x - ped.x;
     const dz = ped.target.z - ped.z;
     const distance = Math.hypot(dx, dz);
     const speed = ped.mode === 'crossing' ? CROSS_SPEED : ped.speed;
+
     if (distance < 0.16) {
       ped.x = ped.target.x;
       ped.z = ped.target.z;
       if (ped.mode === 'crossing') {
+        // Arrived on the far kerb: the target block is now home.
         ped.block = ped.nextBlock;
         ped.corner = ped.nextCorner;
         ped.mode = 'ring';
@@ -422,11 +427,12 @@ export class PedestrianSystem {
       this.decideNext(ped);
       return;
     }
+
     const step = Math.min(speed * dt, distance);
     const nx = ped.x + (dx / distance) * step;
     const nz = ped.z + (dz / distance) * step;
-    // A corner or a wall between here and the next point: do not walk through it. Step
-    // back onto the pavement ring and take the next leg instead.
+
+    // A wall between here and the next corner: drop the crossing and take the next leg.
     if (this.world.colliders?.blockedAt?.(nx, nz, 0.24)) {
       if (ped.mode === 'crossing') ped.mode = 'ring';
       const corners = this.world.walk.ring(ped.block);
@@ -436,6 +442,7 @@ export class PedestrianSystem {
       ped.heading = Math.atan2(ped.target.x - ped.x, ped.target.z - ped.z);
       return;
     }
+
     ped.x = nx;
     ped.z = nz;
     ped.heading = dampAngle(ped.heading, Math.atan2(dx, dz), 7, dt);
@@ -448,32 +455,52 @@ export class PedestrianSystem {
       const pz = ped.z - player.position.z;
       const length = Math.hypot(px, pz);
       if (length < 0.7 && length > 0.001) {
-        ped.x += (px / length) * (0.7 - length);
-        ped.z += (pz / length) * (0.7 - length);
+        const push = (0.7 - length) / length;
+        ped.x += px * push;
+        ped.z += pz * push;
       }
     }
   }
 
-  /** Writes seven instanced meshes from the ped list. */
+  /** Writes the seven instanced meshes from the ped list. */
   draw(dt) {
     const meshes = this.meshes;
     const sway = Math.sin(this.clock * 1.6) * 0.02;
     let hats = 0;
+
     for (let index = 0; index < this.peds.length; index += 1) {
       const ped = this.peds[index];
-      const height = ped.height;
+      const { height } = ped;
       const cos = Math.cos(ped.heading);
       const sin = Math.sin(ped.heading);
       this.yawQuat.setFromAxisAngle(this.yAxis, ped.heading);
       this.scale.set(height, height, height);
 
-      // A body on the ground: the same seven boxes, laid out flat in a loose heap. The
-      // hit particles already told the story; this only has to read at a glance.
+      /** Places one part at a body-local offset, optionally swung about the X axis. */
+      const place = (mesh, baseY, offsetX, offsetY, offsetZ, swingAngle, colorHex, at = index) => {
+        this.position.set(
+          ped.x + offsetX * cos + offsetZ * sin,
+          baseY + offsetY * height,
+          ped.z - offsetX * sin + offsetZ * cos,
+        );
+        if (swingAngle) {
+          this.swingQuat.setFromAxisAngle(this.xAxis, swingAngle);
+          this.quaternion.copy(this.yawQuat).multiply(this.swingQuat);
+        } else {
+          this.quaternion.copy(this.yawQuat);
+        }
+        this.matrix.compose(this.position, this.quaternion, this.scale);
+        mesh.setMatrixAt(at, this.matrix);
+        mesh.setColorAt(at, this.color.set(colorHex));
+      };
+
+      // A body on the ground: the same seven boxes, laid flat in a loose heap. The hit
+      // particles already told the story; this only has to read at a glance.
       if (ped.dead) {
         this.lyingQuat.setFromAxisAngle(this.xAxis, -1.42);
         this.quaternion.copy(this.yawQuat).multiply(this.lyingQuat);
-        const lay = (mesh, ox, oz, colorHex, at = index) => {
-          this.position.set(ped.x + ox * cos + oz * sin, 0.24, ped.z - ox * sin + oz * cos);
+        const lay = (mesh, offsetX, offsetZ, colorHex, at = index) => {
+          this.position.set(ped.x + offsetX * cos + offsetZ * sin, 0.24, ped.z - offsetX * sin + offsetZ * cos);
           this.matrix.compose(this.position, this.quaternion, this.scale);
           mesh.setMatrixAt(at, this.matrix);
           mesh.setColorAt(at, this.color.set(colorHex));
@@ -491,35 +518,23 @@ export class PedestrianSystem {
         continue;
       }
 
+      // A walking body: hips at 0.84 of the ped's height, limbs swinging about the joint.
       const moving = clamp(ped.speed / 2.2, 0, 1);
       const swing = Math.sin(ped.phase) * (0.3 + clamp(ped.speed / 5, 0, 1) * 0.52) * (ped.speed > 0.1 ? 1 : 0);
       const hip = 0.84 * height;
-      const place = (mesh, offsetX, offsetY, offsetZ, swingAngle, colorHex, at = index) => {
-        const wx = ped.x + offsetX * cos + offsetZ * sin;
-        const wz = ped.z - offsetX * sin + offsetZ * cos;
-        this.position.set(wx, hip + offsetY * height, wz);
-        if (swingAngle) {
-          this.swingQuat.setFromAxisAngle(this.xAxis, swingAngle);
-          this.quaternion.copy(this.yawQuat).multiply(this.swingQuat);
-        } else {
-          this.quaternion.copy(this.yawQuat);
-        }
-        this.matrix.compose(this.position, this.quaternion, this.scale);
-        mesh.setMatrixAt(at, this.matrix);
-        mesh.setColorAt(at, this.color.set(colorHex));
-      };
 
-      place(meshes.torso, 0, 0, 0, sway * (1 - moving), ped.jacket);
-      place(meshes.head, 0, 0.56, 0.01, 0, ped.skin);
+      place(meshes.torso, hip, 0, 0, 0, sway * (1 - moving), ped.jacket);
+      place(meshes.head, hip, 0, 0.56, 0.01, 0, ped.skin);
       if (ped.hat) {
-        place(meshes.hat, 0, 0.78, 0.01, 0, ped.hat, hats);
+        place(meshes.hat, hip, 0, 0.78, 0.01, 0, ped.hat, hats);
         hats += 1;
       }
-      place(meshes.legL, -0.11, 0, 0, swing, ped.pants);
-      place(meshes.legR, 0.11, 0, 0, -swing, ped.pants);
-      place(meshes.armL, -0.29, 0.46, 0, -swing * 0.75, ped.jacket);
-      place(meshes.armR, 0.29, 0.46, 0, swing * 0.75, ped.jacket);
+      place(meshes.legL, hip, -0.11, 0, 0, swing, ped.pants);
+      place(meshes.legR, hip, 0.11, 0, 0, -swing, ped.pants);
+      place(meshes.armL, hip, -0.29, 0.46, 0, -swing * 0.75, ped.jacket);
+      place(meshes.armR, hip, 0.29, 0.46, 0, swing * 0.75, ped.jacket);
     }
+
     for (const mesh of [meshes.torso, meshes.head, meshes.legL, meshes.legR, meshes.armL, meshes.armR]) {
       mesh.count = this.peds.length;
       mesh.instanceMatrix.needsUpdate = true;
@@ -534,13 +549,13 @@ export class PedestrianSystem {
     const focus = this.focus;
     for (let index = this.peds.length - 1; index >= 0; index -= 1) {
       const ped = this.peds[index];
-      const dead = Boolean(ped.dead) && (ped.deadTimer ?? 0) <= 0;
-      if (dead || Math.hypot(ped.x - focus.x, ped.z - focus.z) > DESPAWN) {
-        const replacement = this.makePed();
-        if (replacement) this.peds[index] = replacement;
-        else this.peds.splice(index, 1);
-      }
+      const gone = Boolean(ped.dead) && (ped.deadTimer ?? 0) <= 0;
+      if (!gone && Math.hypot(ped.x - focus.x, ped.z - focus.z) <= DESPAWN) continue;
+      const replacement = this.makePed();
+      if (replacement) this.peds[index] = replacement;
+      else this.peds.splice(index, 1);
     }
+
     let guard = 0;
     while (this.peds.length < this.count && guard < 20) {
       guard += 1;

@@ -12,8 +12,21 @@ import { bus } from '../core/events.js';
 const FLEET_CAPACITY = 40;
 const STREAM_RADIUS = 200;
 const MAX_PARKED_DRAWN = 26;
+/** How far a car can be and still be worth a prompt. */
+const REACH = 3.8;
 
-/** The instanced pool: one shell and one trim mesh per body type. */
+const CAR_NAMES = {
+  sedan: 'Sedan',
+  coupe: 'Coupe',
+  van: 'Van',
+  taxi: 'Taxi',
+  police: 'Police cruiser',
+  buggy: 'Beach buggy',
+};
+
+const _color = new THREE.Color();
+
+/** The instanced pool: one shell mesh and one wheel mesh per body type. */
 class Fleet {
   constructor(scene) {
     this.scene = scene;
@@ -28,28 +41,25 @@ class Fleet {
   }
 
   ensure(type) {
-    let entry = this.types.get(type);
-    if (entry) return entry;
+    const existing = this.types.get(type);
+    if (existing) return existing;
+
     const model = getCarModel(type);
-    const shell = new THREE.InstancedMesh(
-      model.shell,
-      new THREE.MeshLambertMaterial({ vertexColors: true }),
-      FLEET_CAPACITY,
-    );
-    const trim = new THREE.InstancedMesh(
-      model.wheels,
-      new THREE.MeshLambertMaterial({ vertexColors: true }),
-      FLEET_CAPACITY,
-    );
-    shell.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    trim.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    shell.frustumCulled = false;
-    trim.frustumCulled = false;
-    shell.name = `fleet-${type}-shell`;
-    trim.name = `fleet-${type}-wheels`;
-    shell.castShadow = false;
-    this.scene.add(shell, trim);
-    entry = { model, shell, trim, count: 0 };
+    const build = (geometry, name) => {
+      const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }), FLEET_CAPACITY);
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      // The instances move every frame and the whole pool is culled per type, not per box.
+      mesh.frustumCulled = false;
+      mesh.name = name;
+      mesh.castShadow = false;
+      this.scene.add(mesh);
+      return mesh;
+    };
+    const entry = {
+      model,
+      shell: build(model.shell, `fleet-${type}-shell`),
+      trim: build(model.wheels, `fleet-${type}-wheels`),
+    };
     this.types.set(type, entry);
     this.entries.set(type, []);
     return entry;
@@ -92,9 +102,6 @@ class Fleet {
   }
 }
 
-const _color = new THREE.Color();
-const CAR_NAMES = { sedan: 'Sedan', coupe: 'Coupe', van: 'Van', taxi: 'Taxi', police: 'Police cruiser', buggy: 'Beach buggy' };
-
 export class VehicleSystem {
   constructor({ world, scene, player, seed = 1, traffic = null }) {
     this.world = world;
@@ -110,7 +117,6 @@ export class VehicleSystem {
     this.released = [];
     this.stats = { parked: world.walk.parking.length, driven: 0, stolen: 0 };
 
-    // Stream the kerbside cars around wherever the player is.
     this.refresh(this.player.position.x, this.player.position.z, true);
   }
 
@@ -118,19 +124,19 @@ export class VehicleSystem {
     this.traffic = traffic;
   }
 
-  /** Records of parked cars near a point, nearest first. */
+  /** Records of parked cars near a point, nearest first. Streamed, not every-frame. */
   refresh(x, z, force = false) {
     if (!force) {
       this.refreshClock -= 1;
       if (this.refreshClock > 0) return;
     }
     this.refreshClock = 8;
-    const all = this.world.walk.parking
+    this.visibleParked = this.world.walk.parking
       .filter((spot) => !this.taken.has(spot.id))
       .map((spot) => ({ ...spot, distance: Math.hypot(spot.x - x, spot.z - z) }))
       .filter((spot) => spot.distance < STREAM_RADIUS)
-      .sort((a, b) => a.distance - b.distance);
-    this.visibleParked = all.slice(0, MAX_PARKED_DRAWN);
+      .sort((a, b) => a.distance - b.distance)
+      .slice(0, MAX_PARKED_DRAWN);
   }
 
   /** Nearest car the player could get into: a parked one, then a live traffic car. */
@@ -139,10 +145,9 @@ export class VehicleSystem {
     let bestDistance = maxDistance;
     for (const spot of this.visibleParked) {
       const distance = Math.hypot(spot.x - x, spot.z - z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = { kind: 'parked', spot };
-      }
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = { kind: 'parked', spot };
     }
     if (this.traffic) {
       const live = this.traffic.nearestCar(x, z, maxDistance);
@@ -151,155 +156,8 @@ export class VehicleSystem {
     return best;
   }
 
-  /** F near a car: steal it. Returns true when the player is now driving. */
-  tryEnter(player) {
-    if (this.activeCar) {
-      this.exit(player);
-      return false;
-    }
-    const found = this.nearestStealable(player.position.x, player.position.z, 3.8);
-    if (!found) return false;
-    let type;
-    let paint;
-    let x;
-    let z;
-    let heading;
-    if (found.kind === 'parked') {
-      const spot = found.spot;
-      this.taken.add(spot.id);
-      type = spot.type;
-      paint = spot.color;
-      x = spot.x;
-      z = spot.z;
-      heading = spot.heading;
-    } else {
-      const stolen = this.traffic.stealCar(found.car);
-      if (!stolen) return false;
-      type = stolen.type;
-      paint = stolen.color;
-      x = stolen.x;
-      z = stolen.z;
-      heading = stolen.heading;
-    }
-    const model = getCarModel(type);
-    const car = new Car({ model, paint, x, z, heading, world: this.world, name: CAR_NAMES[type] ?? 'Car' });
-    const view = buildCarGroup(type, paint);
-    this.scene.add(view.group);
-    car.view = view;
-    car.syncView(0.016);
-    this.activeCar = car;
-    player.enterCar(car);
-    this.stats.stolen += 1;
-    this.stats.driven = (this.stats.driven ?? 0) + 1;
-    if (this.world.state) {
-      this.world.state.carsStolen = this.stats.stolen;
-      this.world.state.mode = 'driving';
-      this.world.state.vehicle = CAR_NAMES[type] ?? 'Car';
-    }
-    this.refresh(player.position.x, player.position.z, true);
-    bus.emit('vehicle:enter', { type, name: car.name, x, z });
-    return true;
-  }
-
-  /** F again: step out at the driver's door and leave the car parked. */
-  exit(player) {
-    const car = this.activeCar;
-    if (!car) return false;
-    const spot = car.exitSpot(-1);
-    player.exitCar(car, spot.x, spot.z, car.heading + Math.PI * 0.5);
-    this.scene.remove(car.view.group);
-    car.view = null;
-    const record = {
-      id: `left-${this.released.length + 1}`,
-      x: car.x,
-      z: car.z,
-      heading: car.heading,
-      type: car.type,
-      color: car.paint,
-      distance: 0,
-    };
-    this.released.unshift(record);
-    // Released cars live in the walk network's own list from now on.
-    this.world.walk.parking.unshift(record);
-    this.refresh(player.position.x, player.position.z, true);
-    this.activeCar = null;
-    if (this.world.state) {
-      this.world.state.mode = 'foot';
-      this.world.state.vehicle = null;
-    }
-    bus.emit('vehicle:exit', { type: car.type, x: car.x, z: car.z });
-    return true;
-  }
-
-  /** Pushes a walking body out of parked and moving cars. */
-  resolveActor(x, z, radius, options = {}) {
-    let px = x;
-    let pz = z;
-    let blocked = false;
-    const minHeight = options.minHeight ?? 0;
-    const test = (cx, cz, halfWidth, halfLength, heading) => {
-      // A car is a rounded rectangle: pushed out of its box in its own frame.
-      const sin = Math.sin(heading);
-      const cos = Math.cos(heading);
-      let dx = px - cx;
-      let dz = pz - cz;
-      const lx = dx * cos - dz * sin;
-      const lz = dx * sin + dz * cos;
-      const ex = halfWidth + radius;
-      const ez = halfLength + radius;
-      if (Math.abs(lx) > ex || Math.abs(lz) > ez) return;
-      blocked = true;
-      const pushX = ex - Math.abs(lx);
-      const pushZ = ez - Math.abs(lz);
-      if (pushX < pushZ) {
-        const sign = lx >= 0 ? 1 : -1;
-        const nx = lx + sign * pushX;
-        px = cx + nx * cos + lz * sin;
-        pz = cz - nx * sin + lz * cos;
-      } else {
-        const sign = lz >= 0 ? 1 : -1;
-        const nz = lz + sign * pushZ;
-        px = cx + lx * cos + nz * sin;
-        pz = cz - lx * sin + nz * cos;
-      }
-    };
-    if (minHeight < 3) {
-      for (const spot of this.visibleParked) {
-        if (Math.hypot(spot.x - px, spot.z - pz) > 7) continue;
-        const model = getCarModel(spot.type);
-        test(spot.x, spot.z, model.dims.width / 2, model.dims.length / 2, spot.heading);
-      }
-      if (this.traffic) {
-        for (const car of this.traffic.cars) {
-          if (Math.hypot(car.x - px, car.z - pz) > 7) continue;
-          const model = getCarModel(car.type);
-          test(car.x, car.z, model.dims.width / 2, model.dims.length / 2, car.heading);
-        }
-      }
-    }
-    return { x: px, z: pz, blocked };
-  }
-
-  /** The closest car to a point among everything on the road, for tests. */
-  nearestCarInfo(x, z) {
-    let best = null;
-    let bestDistance = Infinity;
-    for (const spot of this.visibleParked) {
-      const distance = Math.hypot(spot.x - x, spot.z - z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = { x: spot.x, z: spot.z, type: spot.type, distance };
-      }
-    }
-    return best;
-  }
-
-  /**
-   * Puts the player behind the wheel of a fresh car at a spot, no key press needed.
-   * The shot rig uses this to pose the drive scenario; it is also a useful test hook.
-   */
-  spawnDrivenCar({ type = 'coupe', paint = 0x1f6f78, x = 0, z = 0, heading = 0, speed = 0 } = {}) {
-    if (this.activeCar) this.exit(this.player);
+  /** The car object and its render group, added where the steal left it. */
+  createCar({ type, paint, x, z, heading, speed = 0 }) {
     const model = getCarModel(type);
     const car = new Car({ model, paint, x, z, heading, world: this.world, name: CAR_NAMES[type] ?? 'Car' });
     car.speed = speed;
@@ -320,11 +178,144 @@ export class VehicleSystem {
     return car;
   }
 
+  /** F near a car: steal it. Returns true when the player is now driving. */
+  tryEnter(player) {
+    if (this.activeCar) {
+      this.exit(player);
+      return false;
+    }
+    const found = this.nearestStealable(player.position.x, player.position.z, REACH);
+    if (!found) return false;
+
+    let source;
+    if (found.kind === 'parked') {
+      const spot = found.spot;
+      this.taken.add(spot.id);
+      source = { type: spot.type, paint: spot.color, x: spot.x, z: spot.z, heading: spot.heading };
+    } else {
+      const stolen = this.traffic.stealCar(found.car);
+      if (!stolen) return false;
+      source = { type: stolen.type, paint: stolen.color, x: stolen.x, z: stolen.z, heading: stolen.heading };
+    }
+
+    this.createCar(source);
+    this.stats.stolen += 1;
+    this.stats.driven += 1;
+    if (this.world.state) this.world.state.carsStolen = this.stats.stolen;
+    return true;
+  }
+
+  /** F again: step out at the driver's door and leave the car parked. */
+  exit(player) {
+    const car = this.activeCar;
+    if (!car) return false;
+
+    const spot = car.exitSpot(-1);
+    player.exitCar(car, spot.x, spot.z, car.heading + Math.PI * 0.5);
+    this.scene.remove(car.view.group);
+    car.view = null;
+
+    // The car stays where it stopped, as a kerbside spot the walk network can hand back.
+    this.released.unshift({
+      id: `left-${this.released.length + 1}`,
+      x: car.x,
+      z: car.z,
+      heading: car.heading,
+      type: car.type,
+      color: car.paint,
+      distance: 0,
+    });
+    this.world.walk.parking.unshift(this.released[0]);
+    this.refresh(player.position.x, player.position.z, true);
+
+    this.activeCar = null;
+    if (this.world.state) {
+      this.world.state.mode = 'foot';
+      this.world.state.vehicle = null;
+    }
+    bus.emit('vehicle:exit', { type: car.type, x: car.x, z: car.z });
+    return true;
+  }
+
+  /** Pushes a walking body out of parked and moving cars. */
+  resolveActor(x, z, radius, options = {}) {
+    let px = x;
+    let pz = z;
+    let blocked = false;
+    const minHeight = options.minHeight ?? 0;
+
+    // A car is a rounded rectangle: push out of its box in the car's own frame.
+    const test = (cx, cz, halfWidth, halfLength, heading) => {
+      const sin = Math.sin(heading);
+      const cos = Math.cos(heading);
+      const dx = px - cx;
+      const dz = pz - cz;
+      const lx = dx * cos - dz * sin;
+      const lz = dx * sin + dz * cos;
+      const ex = halfWidth + radius;
+      const ez = halfLength + radius;
+      if (Math.abs(lx) > ex || Math.abs(lz) > ez) return;
+      blocked = true;
+
+      const pushX = ex - Math.abs(lx);
+      const pushZ = ez - Math.abs(lz);
+      if (pushX < pushZ) {
+        const nx = lx + (lx >= 0 ? pushX : -pushX);
+        px = cx + nx * cos + lz * sin;
+        pz = cz - nx * sin + lz * cos;
+      } else {
+        const nz = lz + (lz >= 0 ? pushZ : -pushZ);
+        px = cx + lx * cos + nz * sin;
+        pz = cz - lx * sin + nz * cos;
+      }
+    };
+
+    // Above roof height there is nothing to push against.
+    if (minHeight < 3) {
+      for (const spot of this.visibleParked) {
+        if (Math.hypot(spot.x - px, spot.z - pz) > 7) continue;
+        const { dims } = getCarModel(spot.type);
+        test(spot.x, spot.z, dims.width / 2, dims.length / 2, spot.heading);
+      }
+      if (this.traffic) {
+        for (const car of this.traffic.cars) {
+          if (Math.hypot(car.x - px, car.z - pz) > 7) continue;
+          const { dims } = getCarModel(car.type);
+          test(car.x, car.z, dims.width / 2, dims.length / 2, car.heading);
+        }
+      }
+    }
+    return { x: px, z: pz, blocked };
+  }
+
+  /** The closest parked car to a point, for tests. */
+  nearestCarInfo(x, z) {
+    let best = null;
+    let bestDistance = Infinity;
+    for (const spot of this.visibleParked) {
+      const distance = Math.hypot(spot.x - x, spot.z - z);
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = { x: spot.x, z: spot.z, type: spot.type, distance };
+    }
+    return best;
+  }
+
+  /**
+   * Puts the player behind the wheel of a fresh car at a spot, no key press needed.
+   * The shot rig uses this to pose the drive scenario; it is also a useful test hook.
+   */
+  spawnDrivenCar({ type = 'coupe', paint = 0x1f6f78, x = 0, z = 0, heading = 0, speed = 0 } = {}) {
+    if (this.activeCar) this.exit(this.player);
+    return this.createCar({ type, paint, x, z, heading, speed });
+  }
+
   /** One fixed step for the driven car. */
   update(dt, input) {
     this.refresh(this.player.position.x, this.player.position.z);
     const car = this.activeCar;
     if (!car) return;
+
     const controls = car.autopilot ?? {
       throttle: (input?.isDown('forward') ? 1 : 0) - (input?.isDown('back') ? 1 : 0),
       steer: (input?.isDown('right') ? 1 : 0) - (input?.isDown('left') ? 1 : 0),
@@ -332,35 +323,39 @@ export class VehicleSystem {
     };
     car.update(dt, controls);
     this.separate(car);
+
     if (this.world.state) {
-      this.world.state.speed = Math.abs(car.speed);
+      const speed = Math.abs(car.speed);
+      this.world.state.speed = speed;
       this.world.state.vehicle = car.name;
-      this.world.state.topSpeed = Math.max(this.world.state.topSpeed ?? 0, Math.abs(car.speed) * 3.6);
+      this.world.state.topSpeed = Math.max(this.world.state.topSpeed ?? 0, speed * 3.6);
     }
     car.syncView(dt);
   }
 
   /** Car against car: push the driven car out and take most of the impact. */
   separate(car) {
-    const others = [];
-    for (const spot of this.visibleParked) others.push(spot);
-    if (this.traffic) for (const other of this.traffic.cars) others.push(other);
+    const others = [...this.visibleParked];
+    if (this.traffic) others.push(...this.traffic.cars);
+
     for (const other of others) {
       const dx = car.x - other.x;
       const dz = car.z - other.z;
       const distance = Math.hypot(dx, dz);
       const minimum = 2.1;
       if (distance >= minimum || distance < 0.0001) continue;
+
       const push = (minimum - distance) / distance;
       const resolved = this.world.resolveCircle(car.x + dx * push, car.z + dz * push, car.radius);
       car.x = resolved.x;
       car.z = resolved.z;
+
       const impact = Math.abs(car.speed) + Math.abs(other.speed ?? 0);
       car.vx *= 0.35;
       car.vz *= 0.35;
       car.speed *= 0.4;
       if (impact > 4) bus.emit('vehicle:crash', { x: car.x, z: car.z, impact });
-      if (this.traffic && this.traffic.bump) this.traffic.bump(other, impact * 0.5);
+      this.traffic?.bump?.(other, impact * 0.5);
     }
   }
 
@@ -395,9 +390,11 @@ export class VehicleSystem {
   /** The nearest car worth prompting about, for the HUD. */
   prompt() {
     if (this.activeCar) return 'F  get out';
-    const found = this.nearestStealable(this.player.position.x, this.player.position.z, 3.8);
+    const found = this.nearestStealable(this.player.position.x, this.player.position.z, REACH);
     if (!found) return '';
-    return found.kind === 'parked' ? `F  steal the ${CAR_NAMES[found.spot.type] ?? 'car'}` : `F  carjack the ${CAR_NAMES[found.car.type] ?? 'car'}`;
+    const type = found.kind === 'parked' ? found.spot.type : found.car.type;
+    const name = CAR_NAMES[type] ?? 'car';
+    return found.kind === 'parked' ? `F  steal the ${name}` : `F  carjack the ${name}`;
   }
 
   /** A deterministic paint colour for a type, used when traffic spawns. */

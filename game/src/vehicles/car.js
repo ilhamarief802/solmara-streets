@@ -1,8 +1,8 @@
 // The driven car. An arcade model, not a simulator: longitudinal thrust and drag, a
 // steering angle that shrinks with speed, and a lateral velocity that asphalt grips hard
 // and sand barely does. The handbrake drops grip and lets the tail step out, which is the
-// whole point of a city car. Collision is a circle against the world boxes and a solved
-// push against every other car; a hit bleeds speed and throws a small camera kick.
+// whole point of a city car. Collision is a circle against the world boxes; a hit bleeds
+// speed and throws a small camera kick.
 
 import { clamp, damp } from '../core/math.js';
 import { bus } from '../core/events.js';
@@ -13,6 +13,7 @@ const ACCELERATION = 9.4;
 const BRAKING = 16;
 const REVERSE_ACCELERATION = 5.6;
 const HANDBRAKE_GRIP = 1.35;
+const REVERSE_LIMIT = 8.5;
 
 export class Car {
   constructor({ model, paint, x, z, heading = 0, world, name = 'Coupe' }) {
@@ -64,11 +65,14 @@ export class Car {
     if (!view) return;
     view.group.position.set(this.x, this.y, this.z);
     view.group.rotation.y = this.heading;
-    // Body roll into the corner, pitch under braking, only enough to read.
-    const roll = clamp(-this.steer * clamp(Math.abs(this.speed) / 18, 0, 1) * 0.24, -0.1, 0.1);
+
+    // Body roll into the corner and pitch under throttle, only enough to read.
+    const lean = clamp(Math.abs(this.speed) / 18, 0, 1);
+    const roll = clamp(-this.steer * lean * 0.24, -0.1, 0.1);
     const pitch = clamp(this.throttle * 0.018, -0.03, 0.03);
     view.group.rotation.z = damp(view.group.rotation.z, roll, 6, dt);
     view.group.rotation.x = damp(view.group.rotation.x, pitch, 5, dt);
+
     this.wheelSpin += (this.speed / this.dims.wheelRadius) * dt;
     for (const wheel of view.wheels) {
       wheel.rotation.x = this.wheelSpin;
@@ -86,48 +90,47 @@ export class Car {
     this.surface = surface.kind;
     this.y = surface.y;
     this.grounded = true;
+
     const throttle = clamp(controls.throttle ?? 0, -1, 1);
     const steerInput = clamp(controls.steer ?? 0, -1, 1);
-    const handbrake = Boolean(controls.handbrake);
     this.throttle = throttle;
-    this.handbrake = handbrake;
+    this.handbrake = Boolean(controls.handbrake);
 
     const fx = Math.sin(this.heading);
     const fz = Math.cos(this.heading);
     const rx = Math.cos(this.heading);
     const rz = -Math.sin(this.heading);
 
+    // Split the world velocity into along-the-nose and across-the-nose.
     let vLong = this.vx * fx + this.vz * fz;
     let vLat = this.vx * rx + this.vz * rz;
-
     const maxSpeed = MAX_SPEED[surface.kind] ?? MAX_SPEED.road;
 
     // ------------------------------------------------------------ engine and brakes
     if (throttle > 0) {
+      // Thrust falls away as the car nears the surface's top speed.
       const fade = 1 - clamp(vLong / maxSpeed, 0, 1) * 0.82;
       vLong += ACCELERATION * throttle * fade * dt;
     } else if (throttle < 0) {
       if (vLong > 0.35) vLong += BRAKING * throttle * dt;
-      else vLong += REVERSE_ACCELERATION * throttle * dt;
-      if (vLong < -8.5) vLong = -8.5;
+      else vLong = Math.max(vLong + REVERSE_ACCELERATION * throttle * dt, -REVERSE_LIMIT);
     }
-    // Rolling resistance and aero drag, and a handbrake that scrubs speed.
-    vLong -= vLong * (handbrake ? 1.4 : 0.32) * dt;
+    // Rolling resistance plus aero drag; the handbrake scrubs speed hard.
+    vLong -= vLong * (this.handbrake ? 1.4 : 0.32) * dt;
     vLong -= Math.sign(vLong) * 0.55 * dt;
     if (Math.abs(vLong) < 0.06 && Math.abs(throttle) < 0.05) vLong = 0;
 
     // ------------------------------------------------------------ steering
     // The faster you go, the less lock you get: full lock to park, a whisker at speed.
     const lock = 0.6 / (1 + Math.abs(vLong) * 0.115);
-    const steerAngle = steerInput * lock;
-    this.steer = damp(this.steer, steerAngle, 11, dt);
+    this.steer = damp(this.steer, steerInput * lock, 11, dt);
     let yawRate = (Math.abs(vLong) > 0.05 ? vLong / this.dims.wheelbase : 0) * Math.tan(this.steer);
     yawRate = clamp(yawRate, -1.7, 1.7);
-    if (handbrake) yawRate *= 1.35;
+    if (this.handbrake) yawRate *= 1.35;
     this.heading -= yawRate * dt;
 
     // ------------------------------------------------------------ lateral grip
-    const grip = handbrake ? HANDBRAKE_GRIP : GRIP[surface.kind] ?? GRIP.road;
+    const grip = this.handbrake ? HANDBRAKE_GRIP : GRIP[surface.kind] ?? GRIP.road;
     vLat *= Math.exp(-grip * dt);
     // Sand and kerbs add a little wander, so the beach is not a racetrack.
     if (surface.kind === 'sand' || surface.kind === 'pavement') {
@@ -186,12 +189,10 @@ export class Car {
     return Math.hypot(this.x - x, this.z - z) <= distance + this.dims.length * 0.18;
   }
 
-  /** A safe standing spot beside the driver's door, resolving it out of the world. */
+  /** A safe standing spot beside the driver's door, resolved out of the world. */
   exitSpot(side = -1) {
-    const rx = Math.cos(this.heading) * side;
-    const rz = -Math.sin(this.heading) * side;
-    const x = this.x + rx * (this.dims.width / 2 + 0.75);
-    const z = this.z + rz * (this.dims.width / 2 + 0.75);
+    const x = this.x + Math.cos(this.heading) * side * (this.dims.width / 2 + 0.75);
+    const z = this.z - Math.sin(this.heading) * side * (this.dims.width / 2 + 0.75);
     const resolved = this.world.resolveCircle(x, z, 0.4);
     return { x: resolved.x, z: resolved.z, heading: this.heading };
   }

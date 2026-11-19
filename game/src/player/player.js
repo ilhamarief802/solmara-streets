@@ -14,6 +14,8 @@ const SPRINT_SPEED = 7.7;
 const JUMP_SPEED = 6.3;
 /** Bodies shorter than this above the feet are stepped over (kerbs, low planters). */
 const STEP_HEIGHT = 0.42;
+/** The walkable rectangle: the plan's land bounds, inset a little. */
+const BOUNDS = { minX: -938, maxX: 1278, minZ: -972, maxZ: 678 };
 
 export class Player {
   constructor({ world, scene, spawn = { x: 332.4, z: 60, heading: 0 }, vehicles = null }) {
@@ -47,28 +49,31 @@ export class Player {
 
     const surface = world.walk.surfaceAt(spawn.x, spawn.z);
     this.position.y = surface.y;
-    this.object.position.set(this.position.x, this.position.y, this.position.z);
-    this.object.rotation.y = this.heading;
+    this.place();
   }
 
-  /** Feet position, copied to a scratch object the camera can read. */
+  /** Feet position, shared with the camera and the HUD. */
   get feet() {
     return this.position;
+  }
+
+  /** Writes the body transform from the simulation state. */
+  place() {
+    this.object.position.set(this.position.x, this.position.y, this.position.z);
+    this.object.rotation.y = this.heading;
   }
 
   teleport(x, z, heading = this.heading, y = null) {
     this.position.x = x;
     this.position.z = z;
     this.heading = heading;
-    const surface = this.world.walk.surfaceAt(x, z);
-    this.position.y = y === null ? surface.y : y;
+    this.position.y = y === null ? this.world.walk.surfaceAt(x, z).y : y;
     this.velocity.x = 0;
     this.velocity.y = 0;
     this.velocity.z = 0;
     this.speed = 0;
     this.grounded = true;
-    this.object.position.set(this.position.x, this.position.y, this.position.z);
-    this.object.rotation.y = this.heading;
+    this.place();
   }
 
   /** Called by the vehicle system: sit in the car, stop simulating the body. */
@@ -83,21 +88,21 @@ export class Player {
 
   /** Called by the vehicle system after it has found a safe place to stand. */
   exitCar(car, x, z, heading) {
+    const surface = this.world.walk.surfaceAt(x, z);
     this.car = null;
     this.mode = 'foot';
     this.character.setVisible(true);
     this.character.rest();
-    const surface = this.world.walk.surfaceAt(x, z);
     this.position.x = x;
     this.position.z = z;
+    // Never step out below the roof you are leaving.
     this.position.y = Math.max(surface.y, car ? car.y : surface.y);
     this.heading = heading;
     this.velocity.x = 0;
     this.velocity.y = 0;
     this.velocity.z = 0;
     this.grounded = true;
-    this.object.position.set(this.position.x, this.position.y, this.position.z);
-    this.object.rotation.y = this.heading;
+    this.place();
   }
 
   /**
@@ -109,28 +114,30 @@ export class Player {
     let px = x;
     let pz = z;
     let hit = false;
-    const radius = this.radius;
+    const { radius } = this;
+
     for (let pass = 0; pass < 2; pass += 1) {
       let moved = false;
       for (const box of this.world.colliders.near(px, pz, radius + 0.5)) {
         if (box.top < feetY + STEP_HEIGHT) continue;
         const closestX = clamp(px, box.minX, box.maxX);
         const closestZ = clamp(pz, box.minZ, box.maxZ);
-        let dx = px - closestX;
-        let dz = pz - closestZ;
+        const dx = px - closestX;
+        const dz = pz - closestZ;
         const distance = Math.hypot(dx, dz);
         if (distance >= radius) continue;
         moved = true;
         hit = true;
         if (distance < 0.0001) {
-          const left = px - box.minX;
-          const right = box.maxX - px;
-          const back = pz - box.minZ;
-          const front = box.maxZ - pz;
-          const min = Math.min(left, right, back, front);
-          if (min === left) px = box.minX - radius;
-          else if (min === right) px = box.maxX + radius;
-          else if (min === back) pz = box.minZ - radius;
+          // The centre is inside: leave along the shallowest axis.
+          const toLeft = px - box.minX;
+          const toRight = box.maxX - px;
+          const toBack = pz - box.minZ;
+          const toFront = box.maxZ - pz;
+          const min = Math.min(toLeft, toRight, toBack, toFront);
+          if (min === toLeft) px = box.minX - radius;
+          else if (min === toRight) px = box.maxX + radius;
+          else if (min === toBack) pz = box.minZ - radius;
           else pz = box.maxZ + radius;
         } else {
           const push = radius - distance + 0.002;
@@ -140,6 +147,7 @@ export class Player {
       }
       if (!moved) break;
     }
+
     if (this.vehicles) {
       const car = this.vehicles.resolveActor(px, pz, radius, { exclude: this.car, minHeight: feetY + 0.25 });
       if (car.blocked) {
@@ -151,19 +159,8 @@ export class Player {
     return { x: px, z: pz, hit };
   }
 
-  /**
-   * One fixed step on foot.
-   * @param {number} dt seconds
-   * @param {object} context { input, cameraYaw, cameraPitch }
-   */
-  update(dt, context = {}) {
-    if (this.mode === 'driving') {
-      this.followCar(dt);
-      return;
-    }
-    const input = context.input;
-    const cameraYaw = context.cameraYaw ?? 0;
-
+  /** The unit walk direction for this frame, from the camera's yaw and the keys. */
+  intent(input, cameraYaw) {
     let forward = 0;
     let side = 0;
     if (input) {
@@ -172,35 +169,40 @@ export class Player {
     }
     const fx = Math.sin(cameraYaw);
     const fz = Math.cos(cameraYaw);
-    const rx = Math.cos(cameraYaw);
-    const rz = -Math.sin(cameraYaw);
-    let moveX = fx * forward + rx * side;
-    let moveZ = fz * forward + rz * side;
-    const moveLength = Math.hypot(moveX, moveZ);
-    if (moveLength > 1e-4) {
-      moveX /= moveLength;
-      moveZ /= moveLength;
+    // Right is forward rotated -90 degrees about Y.
+    let moveX = fx * forward + Math.cos(cameraYaw) * side;
+    let moveZ = fz * forward - Math.sin(cameraYaw) * side;
+    const length = Math.hypot(moveX, moveZ);
+    if (length > 1e-4) {
+      moveX /= length;
+      moveZ /= length;
     }
+    return { x: moveX, z: moveZ, length, crouch: Boolean(input?.isDown('crouch')) };
+  }
 
-    const walkIntent = input?.isDown('crouch') ?? false;
-    this.sprinting = Boolean(input?.isDown('sprint')) && moveLength > 0 && !walkIntent;
-    const cruising = walkIntent ? WALK_SPEED : RUN_SPEED;
+  /** One fixed step on foot. */
+  update(dt, context = {}) {
+    if (this.mode === 'driving') {
+      this.followCar(dt);
+      return;
+    }
+    const input = context.input;
+    const move = this.intent(input, context.cameraYaw ?? 0);
+    const moving = move.length > 0.01;
+
+    this.sprinting = Boolean(input?.isDown('sprint')) && moving && !move.crouch;
+    const cruising = move.crouch ? WALK_SPEED : RUN_SPEED;
     const topSpeed = this.sprinting ? SPRINT_SPEED : cruising;
-    const targetX = moveX * topSpeed;
-    const targetZ = moveZ * topSpeed;
 
     const surface = this.world.walk.surfaceAt(this.position.x, this.position.z);
-    const wading = surface.kind === 'water';
-    const acceleration = this.grounded ? (moveLength > 0 ? 26 : 16) : 7;
-    const control = wading ? 0.45 : 1;
-    this.velocity.x = approach(this.velocity.x, targetX * control, acceleration * dt);
-    this.velocity.z = approach(this.velocity.z, targetZ * control, acceleration * dt);
+    // Wading costs speed but never locks the body in place.
+    const control = surface.kind === 'water' ? 0.45 : 1;
+    const acceleration = this.grounded ? (moving ? 26 : 16) : 7;
+    this.velocity.x = approach(this.velocity.x, move.x * topSpeed * control, acceleration * dt);
+    this.velocity.z = approach(this.velocity.z, move.z * topSpeed * control, acceleration * dt);
 
     // Turn to face where he is going; standing still keeps the last facing.
-    if (moveLength > 0.01) {
-      const targetHeading = Math.atan2(moveX, moveZ);
-      this.heading = dampAngle(this.heading, targetHeading, 14, dt);
-    }
+    if (moving) this.heading = dampAngle(this.heading, Math.atan2(move.x, move.z), 14, dt);
 
     // Jump: a short input buffer means a tap between two fixed steps still jumps, and a
     // held key does not bunny-hop (the latch clears only on release).
@@ -214,18 +216,15 @@ export class Player {
       bus.emit('player:jump', { x: this.position.x, z: this.position.z });
     }
     if (!jumpHeld) this._jumpLatch = false;
-
     if (!this.grounded) this.velocity.y -= GRAVITY * dt;
 
     const beforeX = this.position.x;
     const beforeZ = this.position.z;
-    const nextX = this.position.x + this.velocity.x * dt;
-    const nextZ = this.position.z + this.velocity.z * dt;
-    const resolved = this.resolve(nextX, nextZ, this.position.y);
-    this.position.x = clamp(resolved.x, -938, 1278);
-    this.position.z = clamp(resolved.z, -972, 678);
+    const resolved = this.resolve(this.position.x + this.velocity.x * dt, this.position.z + this.velocity.z * dt, this.position.y);
+    this.position.x = clamp(resolved.x, BOUNDS.minX, BOUNDS.maxX);
+    this.position.z = clamp(resolved.z, BOUNDS.minZ, BOUNDS.maxZ);
     if (resolved.hit) {
-      // Colliding into a wall bleeds off the velocity along it.
+      // Hitting a wall bleeds off the velocity into it.
       this.velocity.x *= 0.35;
       this.velocity.z *= 0.35;
     }
@@ -233,10 +232,8 @@ export class Player {
     this.position.y += this.velocity.y * dt;
     const ground = this.world.walk.surfaceAt(this.position.x, this.position.z);
     this._lastGround = ground.kind;
-    if (this.grounded) {
-      // Kerb step-up and step-down: follow the surface while it is close.
-      if (Math.abs(ground.y - this.position.y) < 0.5) this.position.y = ground.y;
-    }
+    // Kerb step-up and step-down: follow the surface while it is close.
+    if (this.grounded && Math.abs(ground.y - this.position.y) < 0.5) this.position.y = ground.y;
     if (this.position.y <= ground.y) {
       this.position.y = ground.y;
       this.velocity.y = 0;
@@ -250,15 +247,14 @@ export class Player {
     this.distanceWalked += moved;
     if (this.world.state) this.world.state.distanceWalked = this.distanceWalked;
 
-    // Footstep hook for the audio session, one per stride.
+    // A footstep hook for the audio layer, one per stride.
     this.stepPhase += moved * 1.9;
     if (this.stepPhase > Math.PI) {
       this.stepPhase -= Math.PI;
       bus.emit('player:footstep', { surface: ground.kind, sprinting: this.sprinting });
     }
 
-    this.object.position.set(this.position.x, this.position.y, this.position.z);
-    this.object.rotation.y = this.heading;
+    this.place();
     this.character.animate(dt, {
       speed: this.speed,
       grounded: this.grounded,
@@ -269,7 +265,7 @@ export class Player {
 
   /** While driving, the body rides in the seat (hidden) and the camera follows. */
   followCar(dt) {
-    const car = this.car;
+    const { car } = this;
     if (!car) {
       this.mode = 'foot';
       return;
