@@ -15,14 +15,22 @@ mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
 ## Play
 
+The title screen sits over the paused city: **Play** starts fresh, **Continue** restores the
+last save (money, missions, settings and where you stood), **Settings** changes draw
+distance, traffic, the crowd, shadows, post processing, camera speed, the FPS readout and
+mute, and **Credits** is one Escape away from the street. Escape pauses mid-game.
+
 WASD walk, Shift sprint, Space jump, Ctrl walk slowly. **F** steals the car at the kerb
 (or carjacks the traffic) and gets you out again; **V** switches to the close camera;
-mouse looks (click to lock the pointer), wheel zooms. T skips an hour, P pauses, F3 frames.
-Thirty traffic cars and thirty-two pedestrians work the streets around you; the HUD names
-the district, the car and the speed.
+mouse looks (click to lock the pointer), wheel zooms. T skips an hour, F3 frames. Thirty
+traffic cars and thirty-two pedestrians work the streets around you; the HUD names the
+district, the car and the speed. Sound is generated with the Web Audio API — engine,
+sirens, guns, footsteps and a district music loop — and starts on your first click.
 
-Shot rig: `?shot=cover&seed=1`, `?shot=night&seed=1`, `?shot=drive&seed=1` (a stolen coupe
-in the downtown traffic) and `?shot=street&seed=1` (on foot on the Neon Strip at dusk).
+Shot rig: `?shot=cover&seed=1&capture=1` (the golden-hour coupe), `?shot=chase&seed=1&capture=1`
+(three cruisers), `?shot=mission&seed=1&capture=1` (a live marina objective) and
+`?shot=night&seed=1&capture=1` (the Neon Strip after dark). Each raises
+`window.__SHOT_READY` and holds the frame.
 
 ---
 

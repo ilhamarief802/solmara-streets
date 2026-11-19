@@ -6,9 +6,12 @@
 // using the vendored make.fun library.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
-// Screenshots come from the deterministic shot rig: `?shot=cover&seed=1`,
-// `?shot=night&seed=1`, `?shot=drive&seed=1` and `?shot=street&seed=1`, all of which
-// raise window.__SHOT_READY once warm.
+// Screenshots come from the deterministic shot rig:
+//   ?shot=cover&seed=1&capture=1
+//   ?shot=chase&seed=1&capture=1
+//   ?shot=mission&seed=1&capture=1
+//   ?shot=night&seed=1&capture=1
+// each of which raises window.__SHOT_READY once warm and holds the frame for the shutter.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 
@@ -171,10 +174,10 @@ try {
   process.stderr.write(`solmara: could not write the dossier: ${error.message}\n`);
   process.stderr.write(
     'solmara: capture the shots first — node serve.ts, then open\n' +
-      '  http://localhost:8080/?shot=cover&seed=1\n' +
-      '  http://localhost:8080/?shot=night&seed=1\n' +
-      '  http://localhost:8080/?shot=drive&seed=1\n' +
-      '  http://localhost:8080/?shot=street&seed=1\n' +
+      '  http://localhost:8080/?shot=cover&seed=1&capture=1\n' +
+      '  http://localhost:8080/?shot=chase&seed=1&capture=1\n' +
+      '  http://localhost:8080/?shot=mission&seed=1&capture=1\n' +
+      '  http://localhost:8080/?shot=night&seed=1&capture=1\n' +
       'waiting for window.__SHOT_READY and saving each as a screenshot in screenshots/, then re-run.\n',
   );
   process.exit(1);

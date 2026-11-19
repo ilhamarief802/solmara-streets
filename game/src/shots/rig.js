@@ -10,17 +10,20 @@ import cover from './cover.js';
 import night from './night.js';
 import drive from './drive.js';
 import street from './street.js';
+import chase from './chase.js';
+import mission from './mission.js';
+import shootout from './shootout.js';
 
-export const SHOTS = { cover, night, drive, street };
+export const SHOTS = { cover, night, drive, street, chase, mission, shootout };
 export const SHOT_NAMES = Object.keys(SHOTS);
 
-/** Reads ?shot= and ?seed= from a query string. */
+/** Reads ?shot=, ?seed= and ?capture=1 from a query string. */
 export function parseShotParams(search = typeof location === 'undefined' ? '' : location.search) {
   const params = new URLSearchParams(search);
   const name = params.get('shot');
   const seedValue = params.get('seed') ?? '1';
   const seed = /^-?\d+$/.test(seedValue) ? Number(seedValue) : seedValue;
-  return { name, seed };
+  return { name, seed, capture: params.get('capture') === '1' };
 }
 
 export class ShotRig {
@@ -36,16 +39,19 @@ export class ShotRig {
     this.warmupSeconds = 2.2;
     this.warmupFrames = 6;
     this.startedAt = 0;
+    /** A capture run hides the pointer and freezes the frame once warm. */
+    this.capture = false;
     /** Exposure multiplier a scenario may set (dusk streets need a stop more light). */
     this.exposure = 1;
   }
 
   /** Starts a named shot. Returns false if the name is unknown. */
-  start(name, seed = 1) {
+  start(name, seed = 1, { capture = false } = {}) {
     const scenario = SHOTS[name];
     if (!scenario) return false;
     this.name = name;
     this.seed = seed;
+    this.capture = Boolean(capture);
     this.elapsed = 0;
     this.frames = 0;
     this.ready = false;
@@ -56,6 +62,13 @@ export class ShotRig {
     window.__SHOT_READY = false;
     document.title = `Solmara Streets · ${name}`;
     document.body.dataset.shot = name;
+    document.body.classList.toggle('is-capture', this.capture);
+    if (this.capture) {
+      // No pointer, no menu, no focus ring: the page is a viewfinder.
+      document.body.style.cursor = 'none';
+      document.documentElement.style.cursor = 'none';
+      window.__SHOT_CAPTURE = true;
+    }
     const ctx = {
       game: this.game,
       seed,
@@ -92,9 +105,16 @@ export class ShotRig {
       this.apply(this.warmupSeconds + 1);
       this.ready = true;
       window.__SHOT_READY = true;
+      window.__SHOT_HOLD = this.capture;
       window.__SHOT_NAME = this.name;
       window.__SHOT_SEED = this.seed;
       document.title = `${this.active.short ?? this.name} · Solmara`;
+      if (this.capture) {
+        // The WARM-UP is over; freeze the simulation so the frame the shutter sees is the
+        // frame every other run sees. The loop keeps rendering, so the HUD stays live.
+        this.game.loop?.setPaused?.(true);
+        this.game.input.enabled = false;
+      }
       this.game.bus?.emit?.('shot:ready', { name: this.name, seed: this.seed });
     }
   }
