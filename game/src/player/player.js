@@ -1,7 +1,7 @@
 // The on-foot player: a character controller for a flat city with kerbs, box walls and
-// moving cars. Velocity is built from the camera's facing, the body turns to it, and a
-// small step-up keeps him walking from the road onto the pavement without jumping. While
-// he is in a car the controller hands the body to the car and stops simulating it.
+// moving cars. Velocity is built from the camera's facing, the body turns to it, and a small
+// step-up keeps him walking from the road onto the pavement without jumping. While he is in
+// a car the controller hands the body to the car and stops simulating it.
 
 import { clamp, dampAngle } from '../core/math.js';
 import { createCharacter } from './character.js';
@@ -106,9 +106,9 @@ export class Player {
   }
 
   /**
-   * Pushes a circle out of every solid box that rises above the feet, then out of the
-   * cars around him. Two passes, like the world's own resolver, but with the height test
-   * that lets a player walk over a kerb or a low planter.
+   * Pushes a circle out of every solid box that rises above the feet, then out of the cars
+   * around him. Two passes, like the world's own resolver, but with the height test that
+   * lets a player walk over a kerb or a low planter.
    */
   resolve(x, z, feetY) {
     let px = x;
@@ -119,6 +119,7 @@ export class Player {
     for (let pass = 0; pass < 2; pass += 1) {
       let moved = false;
       for (const box of this.world.colliders.near(px, pz, radius + 0.5)) {
+        // A kerb or a planter this low is underfoot, not a wall.
         if (box.top < feetY + STEP_HEIGHT) continue;
         const closestX = clamp(px, box.minX, box.maxX);
         const closestZ = clamp(pz, box.minZ, box.maxZ);
@@ -148,6 +149,7 @@ export class Player {
       if (!moved) break;
     }
 
+    // Moving traffic is a soft wall: only cars taller than a step block the body.
     if (this.vehicles) {
       const car = this.vehicles.resolveActor(px, pz, radius, { minHeight: feetY + 0.25 });
       if (car.blocked) {
@@ -174,6 +176,7 @@ export class Player {
     let moveZ = fz * forward - Math.sin(cameraYaw) * side;
     const length = Math.hypot(moveX, moveZ);
     if (length > 1e-4) {
+      // Diagonals must not be faster than a straight line.
       moveX /= length;
       moveZ /= length;
     }
@@ -220,7 +223,11 @@ export class Player {
 
     const beforeX = this.position.x;
     const beforeZ = this.position.z;
-    const resolved = this.resolve(this.position.x + this.velocity.x * dt, this.position.z + this.velocity.z * dt, this.position.y);
+    const resolved = this.resolve(
+      this.position.x + this.velocity.x * dt,
+      this.position.z + this.velocity.z * dt,
+      this.position.y,
+    );
     this.position.x = clamp(resolved.x, BOUNDS.minX, BOUNDS.maxX);
     this.position.z = clamp(resolved.z, BOUNDS.minZ, BOUNDS.maxZ);
     if (resolved.hit) {
@@ -267,6 +274,7 @@ export class Player {
   followCar(dt) {
     const { car } = this;
     if (!car) {
+      // The car is gone (sold, destroyed): fall back to foot rather than riding nothing.
       this.mode = 'foot';
       return;
     }

@@ -26,8 +26,8 @@ const materials = new Map();
 
 /**
  * A lit material with a whisper of self-illumination. The city has no shadow maps and
- * almost no point lights, so at dusk a plain Lambert jersey turns into a silhouette; a
- * few percent of the base colour keeps the hero readable without glowing at noon.
+ * almost no point lights, so at dusk a plain Lambert jersey turns into a silhouette; a few
+ * percent of the base colour keeps the hero readable without glowing at noon.
  */
 function material(hex) {
   let mat = materials.get(hex);
@@ -64,6 +64,7 @@ function limb(width, length, depth, hex, options = {}) {
   const segment = box(width, length, depth, hex, { y: -length / 2 });
   pivot.add(segment);
   if (options.extremity) {
+    // The foot/shoe sits just past the end of the limb and forward of its centre.
     pivot.add(box(width * 1.05, 0.12, depth * 1.5, options.extremity, { y: -length - 0.03, z: depth * 0.34 }));
   }
   return { pivot, segment };
@@ -104,6 +105,7 @@ export function createCharacter(options = {}) {
   neck.add(head);
   head.add(box(0.27, 0.27, 0.25, PALETTE.skin, { y: 0.13 }));
   head.add(box(0.29, 0.12, 0.27, beanie, { y: 0.3 }));
+  // The turned-up brim, then the visor of the beanie and a small nose.
   head.add(box(0.31, 0.05, 0.29, beanie, { y: 0.235 }));
   head.add(box(0.22, 0.06, 0.02, PALETTE.visor, { y: 0.15, z: 0.128 }));
   head.add(box(0.06, 0.08, 0.05, PALETTE.skin, { y: 0.09, z: 0.15 }));
@@ -133,6 +135,8 @@ export function createCharacter(options = {}) {
 
   if (options.scale) root.scale.setScalar(options.scale);
 
+  // `phase` drives the gait; it only advances with distance walked, so a stop freezes the
+  // legs mid-stride rather than snapping them back to rest.
   let phase = 0;
   let idleClock = 0;
   let breath = 0;
@@ -163,6 +167,7 @@ export function createCharacter(options = {}) {
     const swing = Math.sin(phase);
     const stride = clamp(speed / 7.4, 0, 1);
 
+    // Arms swing opposite the legs; both grow with the stride.
     leftLeg.pivot.rotation.x = swing * (0.38 + stride * 0.55);
     rightLeg.pivot.rotation.x = -swing * (0.38 + stride * 0.55);
     leftArm.pivot.rotation.x = -swing * (0.3 + stride * 0.42);
