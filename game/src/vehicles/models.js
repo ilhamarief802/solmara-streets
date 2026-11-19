@@ -4,8 +4,8 @@
 // geometry that bakes its own colours: glass, bumpers, lights, grille, livery.
 //
 // Two consumption modes: buildCarGroup() for the one car the player drives (real wheels
-// that spin, a paint material), and per-type geometries for the instanced fleet traffic
-// and parked cars use.
+// that spin, a paint material), and per-type geometries for the instanced fleet traffic and
+// parked cars use.
 
 /** A soup of coloured triangles. No indices, no UVs: flat car panels do not need them. */
 class Soup {
@@ -17,6 +17,7 @@ class Soup {
   }
 
   triangle(a, b, c, color) {
+    // The face normal comes from the cross product of the two edges.
     const ux = b[0] - a[0];
     const uy = b[1] - a[1];
     const uz = b[2] - a[2];
@@ -71,6 +72,7 @@ class Soup {
       return;
     }
 
+    // Six faces of a box, wound outward.
     this.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], color);
     this.quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], color);
     this.quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], color);
@@ -91,8 +93,14 @@ class Soup {
     for (let i = 0; i < segments; i += 1) {
       const p0 = rim[i];
       const p1 = rim[(i + 1) % segments];
-      this.quad([cx - half, p0[0], p0[1]], [cx - half, p1[0], p1[1]], [cx + half, p1[0], p1[1]], [cx + half, p0[0], p0[1]], color);
-      // The two octagonal end caps.
+      // The tread band, then the two octagonal end caps.
+      this.quad(
+        [cx - half, p0[0], p0[1]],
+        [cx - half, p1[0], p1[1]],
+        [cx + half, p1[0], p1[1]],
+        [cx + half, p0[0], p0[1]],
+        color,
+      );
       this.triangle([cx - half, cy, cz], [cx - half, p0[0], p0[1]], [cx - half, p1[0], p1[1]], color);
       this.triangle([cx + half, cy, cz], [cx + half, p1[0], p1[1]], [cx + half, p0[0], p0[1]], color);
     }
@@ -114,6 +122,7 @@ const cache = new Map();
 const colorCache = new Map();
 
 function color(hex) {
+  // A caller may already hand in a THREE.Color; only hex numbers need converting.
   if (typeof hex === 'string') return hex;
   let value = colorCache.get(hex);
   if (!value) {
@@ -177,6 +186,7 @@ function sedan() {
   const dims = { length: 4.55, width: 1.84, wheelbase: 2.66, track: 1.56, wheelRadius: 0.34, height: 1.44 };
   soup.box(0, 0.55, 0, 1.84, 0.5, 4.5, WHITE);
   soup.box(0, 0.32, 0, 1.7, 0.14, 4.3, color(DARK));
+  // Bonnet and boot decks, then the shared glasshouse.
   soup.box(0, 0.86, 1.42, 1.7, 0.16, 1.55, WHITE);
   soup.box(0, 0.86, -1.55, 1.7, 0.16, 1.35, WHITE);
   cabin(soup, 0.97, -0.08, 1.66, 0.5, 2.2);
@@ -193,6 +203,7 @@ function coupe() {
   soup.box(0, 0.3, 0, 1.72, 0.12, 4.15, color(DARK));
   soup.box(0, 0.78, 1.32, 1.76, 0.14, 1.7, WHITE);
   soup.box(0, 0.78, -1.62, 1.72, 0.14, 1.1, WHITE);
+  // A fastback roof: the top is pulled back over the rear deck.
   cabin(soup, 0.86, -0.42, 1.62, 0.42, 1.95, { topD: 0.62, shiftZ: -0.16 });
   // A ducktail spoiler on the boot.
   soup.box(0, 1.14, -1.52, 1.5, 0.09, 0.42, WHITE);
@@ -207,6 +218,7 @@ function van() {
   const dims = { length: 5.05, width: 2.0, wheelbase: 3.0, track: 1.68, wheelRadius: 0.36, height: 2.12 };
   soup.box(0, 1.0, -0.2, 2.0, 1.46, 4.6, WHITE);
   soup.box(0, 0.3, 0, 1.78, 0.14, 4.5, color(DARK));
+  // A short sloped nose, then the flat sides.
   soup.box(0, 1.34, 2.05, 1.9, 0.72, 0.9, WHITE, { topW: 1.75, topD: 0.6, shiftZ: -0.2 });
   // Windscreen, then the two side windows.
   soup.box(0, 1.3, 2.52, 1.76, 0.5, 0.08, color(GLASS));
@@ -331,12 +343,13 @@ export const CAR_TYPES = Object.keys(BUILDERS);
 export { TYPE_PAINT };
 
 /**
- * Splits a body soup into a painted shell and baked-colour details. The builders write
- * body panels as pure white, so one colour test separates them.
+ * Splits a body soup into a painted shell and baked-colour details. The builders write body
+ * panels as pure white, so one colour test separates them.
  */
 function splitShell(soup) {
   const shell = new Soup();
   const details = new Soup();
+  // Nine floats per triangle: three vertices of three components.
   for (let i = 0; i < soup.positions.length; i += 9) {
     const isWhite = soup.colors[i] > 0.99 && soup.colors[i + 1] > 0.99 && soup.colors[i + 2] > 0.99;
     const target = isWhite ? shell : details;
@@ -361,8 +374,8 @@ export function getCarModel(type) {
   const { soup, dims } = BUILDERS[key]();
   const { shell, details } = splitShell(soup);
 
-  // One wheel at the origin, for the player's car to spin, plus the static set for the
-  // fleet and the parked cars.
+  // One wheel at the origin, for the player's car to spin, plus the static set for the fleet
+  // and the parked cars.
   const wheelGeometry = new Soup();
   wheelGeometry.wheel(0, dims.wheelRadius, 0, dims.wheelRadius, 0.28, color(DARK), color(HUB));
 
@@ -412,6 +425,7 @@ export function buildCarGroup(type, paint = 0xb8bcc0) {
   const details = new THREE.Mesh(model.details, new THREE.MeshLambertMaterial({ vertexColors: true }));
   group.add(details);
 
+  // Every wheel shares one geometry and one material: the offsets live on the meshes.
   const wheelMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
   const wheels = model.wheelOffsets.map((offset) => {
     const wheel = new THREE.Mesh(model.wheelGeometry, wheelMaterial);

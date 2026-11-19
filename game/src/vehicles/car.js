@@ -1,8 +1,8 @@
-// The driven car. An arcade model, not a simulator: longitudinal thrust and drag, a
-// steering angle that shrinks with speed, and a lateral velocity that asphalt grips hard
-// and sand barely does. The handbrake drops grip and lets the tail step out, which is the
-// whole point of a city car. Collision is a circle against the world boxes; a hit bleeds
-// speed and throws a small camera kick.
+// The driven car. An arcade model, not a simulator: longitudinal thrust and drag, a steering
+// angle that shrinks with speed, and a lateral velocity that asphalt grips hard and sand
+// barely does. The handbrake drops grip and lets the tail step out, which is the whole point
+// of a city car. Collision is a circle against the world boxes; a hit bleeds speed and
+// throws a small camera kick.
 
 import { clamp, damp } from '../core/math.js';
 import { bus } from '../core/events.js';
@@ -52,6 +52,7 @@ export class Car {
     this.z = z;
     this.heading = heading;
     this.y = this.world.walk.surfaceAt(x, z).y;
+    // Velocity in world space, from the heading and the requested speed.
     this.vx = Math.sin(heading) * speed;
     this.vz = Math.cos(heading) * speed;
     this.speed = speed;
@@ -97,6 +98,7 @@ export class Car {
     this.throttle = throttle;
     this.handbrake = Boolean(controls.handbrake);
 
+    // The nose direction and the car's right-hand side, in world space.
     const fx = Math.sin(this.heading);
     const fz = Math.cos(this.heading);
     const rx = Math.cos(this.heading);
@@ -113,12 +115,14 @@ export class Car {
       const fade = 1 - clamp(vLong / maxSpeed, 0, 1) * 0.82;
       vLong += ACCELERATION * throttle * fade * dt;
     } else if (throttle < 0) {
+      // Pressing back brakes while rolling forward, and reverses once stopped.
       if (vLong > 0.35) vLong += BRAKING * throttle * dt;
       else vLong = Math.max(vLong + REVERSE_ACCELERATION * throttle * dt, -REVERSE_LIMIT);
     }
     // Rolling resistance plus aero drag; the handbrake scrubs speed hard.
     vLong -= vLong * (this.handbrake ? 1.4 : 0.32) * dt;
     vLong -= Math.sign(vLong) * 0.55 * dt;
+    // Below walking pace with no throttle, settle to a dead stop.
     if (Math.abs(vLong) < 0.06 && Math.abs(throttle) < 0.05) vLong = 0;
 
     // ------------------------------------------------------------ steering

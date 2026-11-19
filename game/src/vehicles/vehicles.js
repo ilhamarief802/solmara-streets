@@ -47,7 +47,11 @@ class Fleet {
 
     const model = getCarModel(type);
     const build = (geometry, name) => {
-      const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshLambertMaterial({ vertexColors: true }), FLEET_CAPACITY);
+      const mesh = new THREE.InstancedMesh(
+        geometry,
+        new THREE.MeshLambertMaterial({ vertexColors: true }),
+        FLEET_CAPACITY,
+      );
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       // The instances move every frame and the whole pool is culled per type, not per box.
       mesh.frustumCulled = false;
@@ -73,6 +77,7 @@ class Fleet {
   add(type, x, y, z, heading, colorHex) {
     if (!this.entries.has(type)) this.ensure(type);
     const list = this.entries.get(type);
+    // A type over its capacity simply stops taking instances; the rest still draw.
     if (list.length < FLEET_CAPACITY) list.push({ x, y, z, heading, color: colorHex });
   }
 
@@ -86,10 +91,12 @@ class Fleet {
         this.quaternion.setFromEuler(this.euler);
         this.position.set(item.x, item.y, item.z);
         this.matrix.compose(this.position, this.quaternion, this.scale);
+        // The shell and the wheels share one transform per instance.
         entry.shell.setMatrixAt(index, this.matrix);
         entry.trim.setMatrixAt(index, this.matrix);
         entry.shell.setColorAt(index, _color.set(item.color));
       }
+      // Instances past the count would still draw with a stale matrix.
       entry.shell.count = list.length;
       entry.trim.count = list.length;
       entry.shell.instanceMatrix.needsUpdate = true;
@@ -128,6 +135,7 @@ export class VehicleSystem {
   /** Records of parked cars near a point, nearest first. Streamed, not every-frame. */
   refresh(x, z, force = false) {
     if (!force) {
+      // A countdown in frames: refresh every eighth call, not every call.
       this.refreshClock -= 1;
       if (this.refreshClock > 0) return;
     }
@@ -152,6 +160,7 @@ export class VehicleSystem {
     }
     if (this.traffic) {
       const live = this.traffic.nearestCar(x, z, maxDistance);
+      // A live car wins only if it is closer than the best parked one.
       if (live && live.distance < bestDistance) best = { kind: 'traffic', car: live.car, distance: live.distance };
     }
     return best;
@@ -174,6 +183,7 @@ export class VehicleSystem {
       this.world.state.mode = 'driving';
       this.world.state.vehicle = car.name;
     }
+    // The kerb it was taken from is now free, and the parked list moves with the player.
     this.refresh(this.player.position.x, this.player.position.z, true);
     bus.emit('vehicle:enter', { type, name: car.name, x, z });
     return car;
@@ -191,6 +201,7 @@ export class VehicleSystem {
     let source;
     if (found.kind === 'parked') {
       const spot = found.spot;
+      // Mark the spot taken so the fleet stops drawing a ghost at the kerb.
       this.taken.add(spot.id);
       source = { type: spot.type, paint: spot.color, x: spot.x, z: spot.z, heading: spot.heading };
     } else {
@@ -212,6 +223,7 @@ export class VehicleSystem {
     if (!car) return false;
 
     const spot = car.exitSpot(-1);
+    // Face away from the car: half a turn from its heading.
     player.exitCar(car, spot.x, spot.z, car.heading + Math.PI * 0.5);
     this.scene.remove(car.view.group);
     car.view = null;
@@ -252,6 +264,7 @@ export class VehicleSystem {
       const cos = Math.cos(heading);
       const dx = px - cx;
       const dz = pz - cz;
+      // Into the car's local frame, then back out after the push.
       const lx = dx * cos - dz * sin;
       const lz = dx * sin + dz * cos;
       const ex = halfWidth + radius;
@@ -259,6 +272,7 @@ export class VehicleSystem {
       if (Math.abs(lx) > ex || Math.abs(lz) > ez) return;
       blocked = true;
 
+      // Leave along whichever axis needs the smaller push.
       const pushX = ex - Math.abs(lx);
       const pushZ = ez - Math.abs(lz);
       if (pushX < pushZ) {
@@ -272,7 +286,7 @@ export class VehicleSystem {
       }
     };
 
-    // Above roof height there is nothing to push against.
+    // A body already above roof height passes over the cars.
     if (minHeight < 3) {
       for (const spot of this.visibleParked) {
         if (Math.hypot(spot.x - px, spot.z - pz) > 7) continue;
@@ -304,8 +318,8 @@ export class VehicleSystem {
   }
 
   /**
-   * Puts the player behind the wheel of a fresh car at a spot, no key press needed.
-   * The shot rig uses this to pose the drive scenario; it is also a useful test hook.
+   * Puts the player behind the wheel of a fresh car at a spot, no key press needed. The shot
+   * rig uses this to pose the drive scenario; it is also a useful test hook.
    */
   spawnDrivenCar({ type = 'coupe', paint = 0x1f6f78, x = 0, z = 0, heading = 0, speed = 0 } = {}) {
     if (this.activeCar) this.exit(this.player);
@@ -318,6 +332,7 @@ export class VehicleSystem {
     const car = this.activeCar;
     if (!car) return;
 
+    // A scripted shot may drive the car itself by setting `autopilot`.
     const controls = car.autopilot ?? {
       throttle: (input?.isDown('forward') ? 1 : 0) - (input?.isDown('back') ? 1 : 0),
       steer: (input?.isDown('right') ? 1 : 0) - (input?.isDown('left') ? 1 : 0),
@@ -344,6 +359,7 @@ export class VehicleSystem {
       const dx = car.x - other.x;
       const dz = car.z - other.z;
       const distance = Math.hypot(dx, dz);
+      // 2.1 m is about two car widths: closer than that and they are overlapping.
       const minimum = 2.1;
       if (distance >= minimum || distance < 0.0001) continue;
 
@@ -370,6 +386,7 @@ export class VehicleSystem {
     }
     if (this.traffic) {
       for (const car of this.traffic.cars) {
+        // A traffic car without its own height sits on the asphalt.
         this.fleet.add(car.type, car.x, car.y ?? 0.09, car.z, car.heading, car.color);
       }
     }
