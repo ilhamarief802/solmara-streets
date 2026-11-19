@@ -1,6 +1,6 @@
-// The car the player has to catch. It is not a traffic agent: it commits to a lane, runs
-// to the end of it, and takes a random turn at each junction, so its route is a readable
-// chase rather than a loop. The mission system moves its marker with it.
+// The car the player has to catch. It is not a traffic agent: it commits to a lane, runs to
+// the end of it, and takes a random turn at each junction, so its route is a readable chase
+// rather than a loop. The mission system moves its marker with it.
 
 import { Random } from '../core/rng.js';
 import { buildCarGroup } from '../vehicles/models.js';
@@ -42,6 +42,7 @@ export class ChaseCar {
     this.sync(0);
   }
 
+  /** The lane under the car, pointing the way it is already facing. */
   findLane(x, z, heading) {
     const fx = Math.sin(heading);
     const fz = Math.cos(heading);
@@ -49,6 +50,7 @@ export class ChaseCar {
     let bestScore = Infinity;
 
     for (const lane of this.world.plan.lanes) {
+      // Ignore lanes running against the car.
       if (lane.dirX * fx + lane.dirZ * fz < 0.4) continue;
       const px = x - lane.from.x;
       const pz = z - lane.from.z;
@@ -98,6 +100,7 @@ export class ChaseCar {
     if (!this.view) return;
     this.view.group.position.set(this.x, this.y, this.z);
     this.view.group.rotation.y = this.heading;
+    // The stolen car is always driving, so its wheels always turn.
     for (const wheel of this.view.wheels) wheel.rotation.x += (this.speed / 0.35) * dt;
   }
 

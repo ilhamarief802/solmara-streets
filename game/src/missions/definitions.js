@@ -1,7 +1,7 @@
 // The story, as data. Five jobs in order, each a list of steps the mission system knows how
-// to run: reach a place (on foot or by car), catch a stolen car, clear a warehouse, pass
-// five checkpoints against the clock, and finish the boss on the Neon Strip. All of the
-// writing lives here so the runtime stays a small machine that reads it.
+// to run: reach a place (on foot or by car), catch a stolen car, clear a warehouse, pass five
+// checkpoints against the clock, and finish the boss on the Neon Strip. All of the writing
+// lives here so the runtime stays a small machine that reads it.
 //
 // Step types:
 //   goto        reach `marker` within `radius` (optionally by car)
@@ -11,8 +11,8 @@
 //   checkpoints pass `points` in order, against one clock
 //   escape      be clean (wanted 0) after the heat this step stirs up
 //
-// Every step may carry `time` (seconds before it fails) and `hint` (the last line of the
-// HUD mission card). All coordinates are in the plan's world metres.
+// Every step may carry `time` (seconds before it fails) and `hint` (the last line of the HUD
+// mission card). All coordinates are in the plan's world metres.
 
 export const MISSIONS = [
   {

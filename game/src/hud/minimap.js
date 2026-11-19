@@ -59,10 +59,12 @@ export class Minimap {
 
   /** Paints the whole city once into an offscreen canvas. */
   buildStatic() {
+    // A headless import has no document, and a missing 2D context has nothing to paint on.
     if (typeof document === 'undefined' || !this.ctx) return;
     const { bounds } = this;
     const spanX = bounds.maxX - bounds.minX;
     const spanZ = bounds.maxZ - bounds.minZ;
+    // One scale for both axes: the city's aspect ratio is the map's.
     const scale = STATIC_WIDTH / spanX;
     const height = Math.round(STATIC_WIDTH * (spanZ / spanX));
 
@@ -72,6 +74,7 @@ export class Minimap {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    // World metres to static-canvas pixels.
     const mx = (x) => (x - bounds.minX) * scale;
     const mz = (z) => (z - bounds.minZ) * scale;
 
@@ -98,6 +101,7 @@ export class Minimap {
 
     const ring = this.world.minimap.highway;
     if (ring?.length) {
+      // One path, stroked twice: a dark casing and a warm core.
       ctx.strokeStyle = 'rgba(10, 16, 20, 0.85)';
       ctx.lineWidth = 7;
       ctx.beginPath();
@@ -118,6 +122,7 @@ export class Minimap {
       ctx.fillRect(mx(water.x0), mz(water.z0), (water.x1 - water.x0) * scale, (water.z1 - water.z0) * scale);
     }
 
+    // The coastline: west and south shores, then the channel mouth as two quay lines.
     ctx.strokeStyle = COAST;
     ctx.lineWidth = 1.4;
     ctx.beginPath();
@@ -125,7 +130,6 @@ export class Minimap {
     ctx.lineTo(mx(-920), mz(640));
     ctx.lineTo(mx(1280), mz(640));
     ctx.stroke();
-    // The channel mouth, drawn as two short quay lines.
     ctx.beginPath();
     ctx.moveTo(mx(-45), mz(-640));
     ctx.lineTo(mx(-45), mz(640));
@@ -188,6 +192,7 @@ export class Minimap {
       for (const car of data.traffic) {
         if (Math.hypot(car.x - x, car.z - z) > this.viewMetres * 0.52) continue;
         const point = toScreen(car.x, car.z);
+        // A tall 2.2 × 2.8 pixel nub reads as a car from above.
         ctx.fillRect(point.x - 1.1, point.y - 1.4, 2.2, 2.8);
       }
     }
@@ -237,6 +242,7 @@ export class Minimap {
     const playerPoint = data.centre ? { x: size / 2, y: size / 2 } : toScreen(x, z);
     ctx.save();
     ctx.translate(playerPoint.x, playerPoint.y);
+    // The map is north-up and its +y is south, hence the half-turn.
     ctx.rotate(Math.PI - (data.heading ?? 0));
     ctx.beginPath();
     ctx.moveTo(0, -7.4);

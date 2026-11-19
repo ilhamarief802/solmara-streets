@@ -1,9 +1,8 @@
 // Missions. One job at a time, read from definitions.js: a marker in the world and on the
-// map, a short brief, timed steps that advance on distance, kills or checkpoints, a
-// reward paid into the wallet, and a simple localStorage save so the story survives a
-// reload. The shop on the Avenida sells armour, ammunition, a shotgun and repairs, and
-// the whole system only touches the other systems through their public methods and the
-// event bus.
+// map, a short brief, timed steps that advance on distance, kills or checkpoints, a reward
+// paid into the wallet, and a simple localStorage save so the story survives a reload. The
+// shop on the Avenida sells armour, ammunition, a shotgun and repairs, and the whole system
+// only touches the other systems through their public methods and the event bus.
 
 import { clamp } from '../core/math.js';
 import { bus } from '../core/events.js';
@@ -47,9 +46,16 @@ export class MissionSystem {
   buildMarkers() {
     const build = (color, height, radius) => {
       const group = new THREE.Group();
+      // The shaft is an open cylinder, so it reads as a beam rather than a solid column.
       const shaft = new THREE.Mesh(
         new THREE.CylinderGeometry(0.22, radius, height, 16, 1, true),
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }),
+        new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: 0.16,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+        }),
       );
       shaft.position.y = height / 2;
 
@@ -67,6 +73,7 @@ export class MissionSystem {
       ring.rotation.x = -Math.PI / 2;
       ring.position.y = 0.06;
 
+      // The floating diamond doubles as the minimap's shape on screen.
       const diamond = new THREE.Mesh(new THREE.OctahedronGeometry(0.34), new THREE.MeshBasicMaterial({ color }));
       diamond.position.y = height * 0.62;
 
@@ -80,6 +87,7 @@ export class MissionSystem {
   }
 
   updateMarker(marker, x, z, dt, pulse) {
+    // A marker with no point, or one hidden for a shot, is simply not drawn.
     if (x === null || this.markersHidden) {
       marker.group.visible = false;
       return;
@@ -118,6 +126,7 @@ export class MissionSystem {
     if (step.type === 'checkpoints') {
       return step.points[Math.min(this.checkpointIndex, step.points.length - 1)];
     }
+    // An escape has nowhere to point: the objective is the absence of police.
     if (step.type === 'escape') return null;
     return step.marker ? { ...step.marker } : null;
   }
@@ -138,6 +147,7 @@ export class MissionSystem {
       if (this.completed.includes(id)) continue;
       return MISSIONS.find((mission) => mission.id === id) ?? null;
     }
+    // Every job is done: there is no next mission.
     return null;
   }
 
@@ -221,6 +231,7 @@ export class MissionSystem {
     if (this.active) return false;
     const def = MISSIONS.find((mission) => mission.id === id);
     if (!def) return false;
+    // The story only advances in order; a scripted shot may start anything.
     if (!scripted && this.nextMission?.id !== id) return false;
 
     this.silent = scripted;
@@ -236,6 +247,7 @@ export class MissionSystem {
 
   /** Shot hook: start a mission at a step without touching story order or the save. */
   startAt(id, stepIndex = 0) {
+    // A posed shot may replace whatever was running.
     this.active = null;
     return this.start(id, { scripted: true, stepIndex });
   }
@@ -245,6 +257,7 @@ export class MissionSystem {
     const def = this.active.def;
     const step = def.steps[index];
     if (!step) {
+      // Running past the last step is how a mission completes.
       this.completeMission();
       return;
     }
@@ -281,12 +294,14 @@ export class MissionSystem {
           health: spawn.health ?? 80,
           boss: Boolean(spawn.boss),
           tag,
+          // Face the player when they appear.
           heading: Math.atan2(this.player.position.x - spawn.x, this.player.position.z - spawn.z),
         });
       }
     }
 
     if (step.type === 'escape' && step.heat) {
+      // The finale starts at the wanted level the step asks for, whatever came before.
       const missing = Math.max(0, step.heat - (this.police?.wanted ?? 0));
       if (missing > 0) this.police?.raise(missing, 'finale');
     }
@@ -327,6 +342,7 @@ export class MissionSystem {
   completeMission() {
     const def = this.active?.def;
     if (!def) return;
+    // A mission only pays its full reward the first time it is finished.
     const first = !this.completed.includes(def.id);
     if (first) this.completed.push(def.id);
 
@@ -382,6 +398,7 @@ export class MissionSystem {
       },
       { key: '4', slot: 4, label: 'Repair your car', price: SHOP_PRICES.repair },
     ];
+    // The HUD greys out rows the player cannot afford.
     for (const item of items) item.affordable = this.money >= item.price;
     return items;
   }
@@ -414,6 +431,7 @@ export class MissionSystem {
       return false;
     }
 
+    // Take the money first: a failed spend must not hand out the goods.
     if (!this.spend(item.price, `shop:${slot}`)) return false;
     if (slot === 1) this.combat?.addArmour(100);
     if (slot === 2) this.combat?.addAmmo('pistol', 24);
@@ -428,6 +446,7 @@ export class MissionSystem {
     }
 
     this.hud?.notify(`Bought ${item.label}`, 'reward');
+    // The prices may have greyed out with the new balance.
     if (this.shopOpen) this.hud?.showShop(this.shopItems());
     bus.emit('shop:buy', { slot, price: item.price, money: this.money });
     return true;
@@ -466,6 +485,7 @@ export class MissionSystem {
       case 'chase': {
         if (!this.chaseCar) return;
         this.chaseCar.update(dt);
+        // Distance is measured to the player's car when they have one: a chase is a chase.
         const target = this.vehicles?.activeCar ?? player;
         const distance = Math.hypot(this.chaseCar.x - target.x, this.chaseCar.z - target.z);
         if (distance < (step.radius ?? 7)) this.completeStep();
@@ -473,6 +493,7 @@ export class MissionSystem {
       }
 
       case 'killAll':
+        // The step is done when no tagged thug is left alive.
         if (this.combat?.countAlive(this.stepTag) === 0) this.completeStep();
         return;
 
@@ -536,8 +557,10 @@ export class MissionSystem {
     }
     if (!payload || typeof payload !== 'object') return false;
 
+    // The wallet and the story load even if the combat system is not wired yet.
     if (Number.isFinite(payload.money)) this.money = Math.max(0, Math.round(payload.money));
     if (Array.isArray(payload.completed)) {
+      // Only ids the current story still knows about survive an update.
       this.completed = payload.completed.filter((id) => MISSION_ORDER.includes(id));
     }
     if (!this.combat) return true;

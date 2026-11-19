@@ -1,9 +1,9 @@
-// The HUD. Everything is plain DOM over the canvas except the minimap, which is a canvas
-// of its own. The layout deliberately avoids the top-left corner (the page's menu button
-// lives there in the captures): money, clock and the wanted stars sit top-right; health,
-// armour, the weapon chip and the map bottom-left; the mission card bottom-right; one
-// centred prompt and one centred crosshair. Text is set only when it changes, the money
-// counter ticks up over a few frames, and the minimap redraws at 12 Hz.
+// The HUD. Everything is plain DOM over the canvas except the minimap, which is a canvas of
+// its own. The layout deliberately avoids the top-left corner (the page's menu button lives
+// there in the captures): money, clock and the wanted stars sit top-right; health, armour,
+// the weapon chip and the map bottom-left; the mission card bottom-right; one centred prompt
+// and one centred crosshair. Text is set only when it changes, the money counter ticks up
+// over a few frames, and the minimap redraws at 12 Hz.
 //
 // `update()` takes a plain snapshot from main.js; nothing in here imports a game system.
 
@@ -52,6 +52,7 @@ export class Hud {
     this.minimap = null;
     this.shopItems = null;
     this._moneySeeded = false;
+    // A headless import has no HUD root; every method below is then a no-op.
     if (!root) return;
 
     root.innerHTML = '';
@@ -74,6 +75,7 @@ export class Hud {
     make('span', 'hud-money-sign', this.moneyWrap, '$');
     this.moneyValue = make('span', 'hud-money-value', this.moneyWrap, '0');
 
+    // Five stars, lit from the left; four or more of them glow hot.
     this.stars = make('div', 'hud-stars', this.topRight);
     this.starNodes = [];
     for (let index = 0; index < STAR_COUNT; index += 1) {
@@ -104,6 +106,7 @@ export class Hud {
     this.mapWrap.append(mapCanvas);
     this.mapLabel = make('div', 'hud-map-label', this.mapWrap, '');
 
+    // The weapon chip and speed live beside the map, bottom-aligned.
     const side = make('div', 'hud-map-side', this.mapRow);
     this.weaponName = make('div', 'hud-weapon-name', side, 'FISTS');
     this.weaponAmmo = make('div', 'hud-weapon-ammo', side, '');
@@ -132,6 +135,7 @@ export class Hud {
     this.toast = make('div', 'hud-toast');
     this.toast.hidden = true;
 
+    // The down card covers the whole frame, so it is built once and hidden.
     this.downCard = make('div', 'hud-down');
     this.downTitle = make('div', 'hud-down-title', this.downCard, 'WASTED');
     this.downHint = make('div', 'hud-down-hint', this.downCard, 'You wake up at the hospital.');
@@ -214,6 +218,7 @@ export class Hud {
     const armour = Math.max(0, Math.min(100, Math.round(armourValue)));
     this.healthFill.style.width = `${health}%`;
     this.armourFill.style.width = `${armour}%`;
+    // At 30% the health bar turns red and starts pulsing; empty armour greys out.
     this.healthBar.classList.toggle('is-low', health <= 30);
     this.armourRow.classList.toggle('is-empty', armour <= 0);
   }
@@ -224,6 +229,7 @@ export class Hud {
     this.set('weaponName', WEAPON_LABEL[current.id] ?? String(current.id ?? 'FISTS').toUpperCase());
     this.set('weaponAmmo', armed ? `${current.clip ?? 0} / ${current.reserve ?? 0}` : 'MELEE');
     this.weaponAmmo.classList.toggle('is-empty', armed && (current.clip ?? 0) <= 0);
+    // The crosshair only exists for a gun, and never while the player is down.
     this.crosshair.hidden = !armed || Boolean(info.down);
     this.crosshair.classList.toggle('is-shotgun', current.id === 'shotgun');
     this.crosshair.classList.toggle('is-firing', Boolean(info.firing));
@@ -248,6 +254,7 @@ export class Hud {
     if (mission.step && mission.total) parts.push(`STEP ${mission.step}/${mission.total}`);
     if (hasTimer) {
       parts.push(clockText(mission.timer));
+      // The bar drains as the clock does.
       this.missionBarFill.style.width = `${Math.max(0, Math.min(100, mission.timerFraction * 100))}%`;
     }
     if (mission.hint) parts.push(mission.hint);
@@ -283,6 +290,7 @@ export class Hud {
 
     if (this.shownMoney !== this.targetMoney) {
       const difference = this.targetMoney - this.shownMoney;
+      // Fast enough to reach a reward in a few frames, slow enough to read as a count.
       const step = Math.max(1, Math.abs(difference) * Math.min(1, dt * 7));
       this.shownMoney += Math.sign(difference) * Math.min(Math.abs(difference), step);
       if (Math.abs(this.targetMoney - this.shownMoney) < 1) this.shownMoney = this.targetMoney;
@@ -303,6 +311,7 @@ export class Hud {
         x: mapData.x ?? 0,
         z: mapData.z ?? 0,
         heading: mapData.heading ?? 0,
+        // The map is always centred on the player, so the arrow is always the middle.
         centre: true,
       });
     }
@@ -334,6 +343,7 @@ export class Hud {
 
     for (const item of items) {
       const row = document.createElement('div');
+      // The rows look the same whether or not the player can afford them, but poor ones dim.
       row.className = item.affordable ? 'hud-shop-row' : 'hud-shop-row is-poor';
       // Built from nodes rather than an innerHTML template: the labels are data.
       const key = document.createElement('span');
