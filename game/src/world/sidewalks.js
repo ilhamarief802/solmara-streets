@@ -22,12 +22,14 @@ const RING = GRID.sidewalk / 2;
 const EDGE_IN = GRID.kerbInset;
 const EDGE_OUT = GRID.cell - GRID.kerbInset;
 
+/** Kerbside car colours, picked per parking spot. */
 const PAINT = [0xc94a3f, 0x2f5d8a, 0x3f7a55, 0xb8872f, 0x6d5a8f, 0xd8d2c4, 0x2b3a44, 0x9a3f5c];
+const PARKED_TYPES = ['sedan', 'sedan', 'coupe', 'van', 'taxi', 'sedan', 'coupe'];
 
 /**
  * Builds the pedestrian and parking layer for a plan.
  * @param {object} plan the city plan
- * @param {object} colliders the world collider registry (used to keep parked cars clear)
+ * @param {object} colliders the collider registry (used to keep parked cars clear)
  */
 export function createWalkNetwork(plan, colliders = null) {
   const random = new Random(`${plan.seed}:walk`);
@@ -38,7 +40,7 @@ export function createWalkNetwork(plan, colliders = null) {
     return blockById.get(`b-${i}-${j}`) ?? null;
   }
 
-  /** Grid cell a world point falls in. Blocks sit south-east of their junction. */
+  /** The grid cell a world point falls in. Blocks sit south-east of their junction. */
   function cellAt(x, z) {
     return {
       i: Math.floor((x - GRID.originX) / GRID.cell),
@@ -77,36 +79,30 @@ export function createWalkNetwork(plan, colliders = null) {
     return plan.nodeById.get(`n-${i}-${j}`) ?? null;
   }
 
+  // Walking straight off each corner lands on this neighbouring cell and that corner of it.
+  const CROSSING_TARGETS = [
+    { di: 0, dj: -1, corner: 3 },
+    { di: 1, dj: 0, corner: 0 },
+    { di: 0, dj: 1, corner: 1 },
+    { di: -1, dj: 0, corner: 2 },
+  ];
+
   /**
    * Where a pedestrian at a ring corner would step to cross the street straight ahead:
    * the ring corner of the block across the road, or null when there is no block, no
-   * signal, or the water is in the way. Corners are taken clockwise, so the crossing is
-   * always the "keep going straight" option.
+   * signal, or the water is in the way.
    */
   function crossingFrom(block, corner) {
     const node = cornerNode(block, corner);
     if (!node || !node.signal) return null;
-    let target = null;
-    let targetCorner = 0;
-    if (corner === 0) {
-      target = blockAt(block.i, block.j - 1);
-      targetCorner = 3;
-    } else if (corner === 1) {
-      target = blockAt(block.i + 1, block.j);
-      targetCorner = 0;
-    } else if (corner === 2) {
-      target = blockAt(block.i, block.j + 1);
-      targetCorner = 1;
-    } else {
-      target = blockAt(block.i - 1, block.j);
-      targetCorner = 2;
-    }
-    if (!target) return null;
-    const a = ring(block)[corner];
-    const b = ring(target)[targetCorner];
-    const mid = { x: (a.x + b.x) / 2, z: (a.z + b.z) / 2 };
+    const target = CROSSING_TARGETS[corner];
+    const neighbour = blockAt(block.i + target.di, block.j + target.dj);
+    if (!neighbour) return null;
+    const from = ring(block)[corner];
+    const to = ring(neighbour)[target.corner];
+    const mid = { x: (from.x + to.x) / 2, z: (from.z + to.z) / 2 };
     if (isWaterAt(mid.x, mid.z)) return null;
-    return { block: target, corner: targetCorner, from: a, to: b };
+    return { block: neighbour, corner: target.corner, from, to };
   }
 
   /** True when a point stands on a block's pavement ring. */
@@ -117,6 +113,7 @@ export function createWalkNetwork(plan, colliders = null) {
   /** What is under a point, and how high its surface is. */
   function surfaceAt(x, z) {
     if (isWaterAt(x, z)) return { kind: 'water', y: SURFACE.water };
+
     const { i, j } = cellAt(x, z);
     if (i >= 0 && j >= 0 && i < GRID.cols - 1 && j < GRID.rows - 1) {
       const block = blockAt(i, j);
@@ -133,89 +130,80 @@ export function createWalkNetwork(plan, colliders = null) {
           return onRing ? { kind: 'pavement', y: SURFACE.pavement } : { kind: 'lot', y: SURFACE.ground };
         }
       }
-      if (!isWaterAt(x, z)) return { kind: 'road', y: SURFACE.road };
+      return { kind: 'road', y: SURFACE.road };
     }
+
     if (isSandAt(x, z)) return { kind: 'sand', y: SURFACE.sand };
     return { kind: 'ground', y: SURFACE.ground };
   }
 
-  /** The ring point closest to a position, used when a pedestrian has to rejoin. */
+  /** The ring corner closest to a position, used when a pedestrian has to rejoin. */
   function nearestCorner(block, x, z) {
     const points = ring(block);
     let best = 0;
     let bestDistance = Infinity;
     for (let index = 0; index < points.length; index += 1) {
       const distance = Math.hypot(points[index].x - x, points[index].z - z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = index;
-      }
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = index;
     }
     return { corner: best, distance: bestDistance, point: points[best] };
   }
 
   // ---------------------------------------------------------------- parking
-  // Kerbside spots, 2.2 m into the roadway from each block edge, outside the traffic
-  // lane the plan paints at 3.2 m from the centreline. One or two sides per block, a
-  // couple of spaces per side: enough that a car is always within sight.
+  // Kerbside spots, 2.2 m into the roadway from each block edge, outside the traffic lane
+  // the plan paints at 3.2 m from the centreline. One or two sides per block, a couple of
+  // spaces per side: enough that a car is always within sight.
   const parking = [];
   const blocked = (x, z) => Boolean(colliders?.blockedAt(x, z, 1.1));
-  const addSpace = (x, z, heading, type = null) => {
-    if (isWaterAt(x, z) || blocked(x, z)) return false;
-    for (const spot of parking) {
-      if (Math.hypot(spot.x - x, spot.z - z) < 6.2) return false;
-    }
+
+  /** True when a junction is close enough to the spot to make parking there a joke. */
+  function nearJunction(x, z) {
     const cell = cellAt(x, z);
     for (const node of plan.nodes) {
       if (node.i !== cell.i && node.i !== cell.i + 1) continue;
       if (node.j !== cell.j && node.j !== cell.j + 1) continue;
-      if (Math.hypot(node.x - x, node.z - z) < 17) return false;
+      if (Math.hypot(node.x - x, node.z - z) < 17) return true;
+    }
+    return false;
+  }
+
+  const addSpace = (x, z, heading, type = null) => {
+    if (isWaterAt(x, z) || blocked(x, z) || nearJunction(x, z)) return false;
+    for (const spot of parking) {
+      if (Math.hypot(spot.x - x, spot.z - z) < 6.2) return false;
     }
     parking.push({
       id: `park-${parking.length + 1}`,
       x: Number(x.toFixed(2)),
       z: Number(z.toFixed(2)),
       heading,
-      type: type ?? random.pick(['sedan', 'sedan', 'coupe', 'van', 'taxi', 'sedan', 'coupe']),
+      type: type ?? random.pick(PARKED_TYPES),
       color: random.pick(PAINT),
     });
     return true;
   };
 
+  // Each side of a block is a kerb line inset into the road; the heading faces the kerb.
+  const PARK_SIDES = {
+    n: (block) => ({ x0: block.x0 + 15, x1: block.x1 - 15, z: block.z0 - 2.2, heading: -Math.PI / 2 }),
+    s: (block) => ({ x0: block.x0 + 15, x1: block.x1 - 15, z: block.z1 + 2.2, heading: Math.PI / 2 }),
+    w: (block) => ({ z0: block.z0 + 15, z1: block.z1 - 15, x: block.x0 - 2.2, heading: 0 }),
+    e: (block) => ({ z0: block.z0 + 15, z1: block.z1 - 15, x: block.x1 + 2.2, heading: Math.PI }),
+  };
+
   const parkAlong = (block, side) => {
-    const inset = 2.2;
-    let x0 = 0;
-    let x1 = 0;
-    let z0 = 0;
-    let z1 = 0;
-    let heading = 0;
-    if (side === 'n') {
-      x0 = block.x0 + 15;
-      x1 = block.x1 - 15;
-      z0 = z1 = block.z0 - inset;
-      heading = -Math.PI / 2;
-    } else if (side === 's') {
-      x0 = block.x0 + 15;
-      x1 = block.x1 - 15;
-      z0 = z1 = block.z1 + inset;
-      heading = Math.PI / 2;
-    } else if (side === 'w') {
-      z0 = block.z0 + 15;
-      z1 = block.z1 - 15;
-      x0 = x1 = block.x0 - inset;
-      heading = 0;
-    } else {
-      z0 = block.z0 + 15;
-      z1 = block.z1 - 15;
-      x0 = x1 = block.x1 + inset;
-      heading = Math.PI;
-    }
-    const length = Math.hypot(x1 - x0, z1 - z0);
+    const line = PARK_SIDES[side](block);
+    const horizontal = side === 'n' || side === 's';
+    const length = horizontal ? line.x1 - line.x0 : line.z1 - line.z0;
     const spaces = Math.floor(length / 8.5);
     for (let index = 0; index < spaces; index += 1) {
       if (!random.chance(0.42)) continue;
       const t = (index + 0.5) / Math.max(1, spaces);
-      addSpace(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, heading);
+      const x = horizontal ? line.x0 + (line.x1 - line.x0) * t : line.x;
+      const z = horizontal ? line.z : line.z0 + (line.z1 - line.z0) * t;
+      addSpace(x, z, line.heading);
     }
   };
 
@@ -228,14 +216,7 @@ export function createWalkNetwork(plan, colliders = null) {
     { x: 168, z: -690.2, heading: Math.PI / 2, type: 'van', color: 0x4a5a68 },
   ];
   for (const spot of curated) {
-    parking.push({
-      id: `park-curated-${spot.type}`,
-      x: spot.x,
-      z: spot.z,
-      heading: spot.heading,
-      type: spot.type,
-      color: spot.color,
-    });
+    parking.push({ id: `park-curated-${spot.type}`, ...spot });
   }
 
   for (const block of plan.blocks) {
@@ -245,16 +226,15 @@ export function createWalkNetwork(plan, colliders = null) {
     for (const side of sides.slice(0, count)) parkAlong(block, side);
   }
 
-  // Nearest free spot lookup, for a car released by its driver, and for tests.
+  /** Nearest free spot, for a car released by its driver, and for tests. */
   function nearestParking(x, z, maxDistance = 12) {
     let best = null;
     let bestDistance = maxDistance;
     for (const spot of parking) {
       const distance = Math.hypot(spot.x - x, spot.z - z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = spot;
-      }
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = spot;
     }
     return best;
   }
