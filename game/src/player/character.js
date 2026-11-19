@@ -110,7 +110,7 @@ export function createCharacter(options = {}) {
   head.add(box(0.22, 0.06, 0.02, PALETTE.visor, { y: 0.15, z: 0.128 }));
   head.add(box(0.06, 0.08, 0.05, PALETTE.skin, { y: 0.09, z: 0.15 }));
 
-  // Arms: pivot at the shoulder, a slight outward cant.
+  // Arms: pivot at the shoulder, with a slight outward cant.
   const leftArm = limb(0.15, 0.58, 0.17, sleeve, { extremity: PALETTE.skin });
   const rightArm = limb(0.15, 0.58, 0.17, sleeve, { extremity: PALETTE.skin });
   leftArm.pivot.position.set(-0.33, 0.5, 0);
@@ -167,7 +167,7 @@ export function createCharacter(options = {}) {
     const swing = Math.sin(phase);
     const stride = clamp(speed / 7.4, 0, 1);
 
-    // Arms swing opposite the legs; both grow with the stride.
+    // The arms swing opposite the legs; both grow with the stride.
     leftLeg.pivot.rotation.x = swing * (0.38 + stride * 0.55);
     rightLeg.pivot.rotation.x = -swing * (0.38 + stride * 0.55);
     leftArm.pivot.rotation.x = -swing * (0.3 + stride * 0.42);

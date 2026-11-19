@@ -173,8 +173,8 @@ export const DISTRICT_IDS = ['downtown', 'marina', 'verano', 'neon', 'harbour', 
 /** The playable land rectangle, slightly outside the built districts. */
 export const LAND_BOUNDS = { minX: -920, minZ: -980, maxX: 1280, maxZ: 680 };
 
-// The order rectangles are tested in: the small, specific districts win any overlap with
-// the big downtown and marina rectangles.
+// The order the rectangles are tested in: the small, specific districts win any overlap
+// with the big downtown and marina rectangles.
 const LOOKUP_ORDER = ['airstrip', 'harbour', 'beach', 'neon', 'downtown', 'marina', 'verano'];
 
 function inside(bounds, x, z) {
@@ -211,7 +211,7 @@ export function paletteColor(palette, index) {
   return list[((index % list.length) + list.length) % list.length];
 }
 
-/** The district's short name for labels. */
+/** The district's short name, for labels. */
 export function districtName(id) {
   return districtOf(id).name;
 }

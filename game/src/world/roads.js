@@ -1,7 +1,7 @@
 // Streets: asphalt ribbons with lane paint, junction caps, zebra crossings, the raised
 // pavements and kerbs around every block, and the elevated ring highway with its pillars
-// and guard rails. Each surface class is merged into one mesh, so the whole street grid is
-// a dozen draw calls rather than a thousand.
+// and guard rails. Each surface class is merged into one mesh, so the whole street grid
+// costs a dozen draw calls rather than a thousand.
 
 import { MeshBuilder, cityMaterial, colorTriple } from './geometry.js';
 import { Random } from '../core/rng.js';
@@ -45,7 +45,7 @@ export function buildRoads(plan, textures, options = {}) {
       (edge.ax + edge.bx) / 2,
       (edge.az + edge.bz) / 2,
       edge.width,
-      // One extra metre each end hides the seam under the junction cap.
+      // One extra metre at each end hides the seam under the junction cap.
       edge.length + 1,
       ROAD_Y,
       white,
@@ -87,7 +87,7 @@ export function buildRoads(plan, textures, options = {}) {
     const w = block.x1 - block.x0;
     const d = block.z1 - block.z0;
     if (w < sidewalk * 3 || d < sidewalk * 3) continue;
-    // Each block gets a slightly different slab tone so the grid does not look stamped.
+    // Each block gets a slightly different slab tone, so the grid does not look stamped.
     const shade = colorTriple(districtOf(block.district).palette.ground, 0.95 + random.range(0, 0.08));
 
     // Four strips in a ring; they overlap at the corners, which is invisible.
@@ -178,7 +178,7 @@ export function buildHighway(plan, textures, colliders, options = {}) {
       );
     }
 
-    // Pillars every ~46 m; the deck reads as a viaduct from the street below.
+    // Pillars every ~46 m; from the street below the deck reads as a viaduct.
     const count = Math.max(1, Math.round(segment.length / 46));
     for (let i = 0; i < count; i += 1) {
       const t = (i + 0.5) / count;
@@ -222,7 +222,7 @@ export function buildHighway(plan, textures, colliders, options = {}) {
       const ay = fromY + ((toY - fromY) * i) / steps;
       const by = fromY + ((toY - fromY) * (i + 1)) / steps;
 
-      // One quad per step: the stepped look is cheaper than a sloped strip and reads fine.
+      // One quad per step: stepped is cheaper than a sloped strip and reads just as well.
       deck.quad(
         [ax + halfX, ay, az + halfZ],
         [bx + halfX, by, bz + halfZ],

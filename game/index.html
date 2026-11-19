@@ -13,10 +13,10 @@
     <link rel="stylesheet" href="./styles/base.css" />
   </head>
   <body>
-    <!-- The one canvas the whole game draws into. -->
+    <!-- The single canvas every frame of the city is drawn into. -->
     <canvas id="viewport" width="1280" height="720" aria-label="Solmara Streets, an open-world city"></canvas>
 
-    <!-- Boot card: visible until the first frame of the city is on screen. -->
+    <!-- Boot card: shown until the first frame of the city has been rendered. -->
     <section id="boot" class="boot">
       <div class="boot-mark">SOLMARA</div>
       <h1 class="boot-title">Streets</h1>
@@ -25,13 +25,13 @@
       <p class="boot-keys">WASD walk · Shift sprint · Space jump · F steal a car · V camera · T skips an hour · Esc pause</p>
     </section>
 
-    <!-- The HUD (district, speed, prompt) is built in here by src/hud/hud.js. -->
+    <!-- The HUD (district name, speed, interaction prompt) is built into this node by src/hud/hud.js. -->
     <div id="hud-root" class="hud-root"></div>
 
-    <!-- Frame time readout, toggled with F3. -->
+    <!-- Frame-time readout, toggled with F3. -->
     <pre id="perf" class="perf" hidden></pre>
 
-    <!-- The one error surface: window errors and unhandled rejections land here. -->
+    <!-- The one error surface: window errors and unhandled rejections are reported here. -->
     <div id="error-overlay" class="error-overlay" hidden>
       <div class="error-card">
         <h2 class="error-title">Solmara Streets hit a fault</h2>
@@ -40,11 +40,11 @@
       </div>
     </div>
 
-    <!-- Three.js is vendored beside the page: no build step and no network request. It is a
-         classic script (not a module) so it defines the global THREE before any module runs.
-         The entry module is loaded as a module, so it executes after the document is parsed
-         and the canvas above already exists. The deterministic shot rig is selected with
-         ?shot=…, handled in src/shots/rig.js. -->
+    <!-- three.js is vendored next to the page: no build step, no network request. It loads as a
+         classic script (not a module) so the global THREE exists before any module runs. The
+         entry module below is a module, so it executes after the document is parsed and the
+         canvas above already exists. The deterministic shot rig is selected with ?shot=… and
+         handled in src/shots/rig.js. -->
     <script src="./vendor/three.min.js"></script>
     <script type="module" src="./src/main.js"></script>
   </body>

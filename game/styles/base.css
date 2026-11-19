@@ -483,7 +483,7 @@ body.has-error #viewport {
   font-family: var(--mono);
   font-size: 0.55rem;
   letter-spacing: 0.34em;
-  color: rgba(255, 90, 74, 0.0);
+  color: rgba(255, 90, 74, 0);
   transition: color 200ms linear;
 }
 
@@ -990,7 +990,7 @@ body.is-rain #viewport {
   filter: saturate(0.82) brightness(0.9) hue-rotate(-7deg);
 }
 
-/* Screens streaks only while driving: on foot the rain stays on the far side of the glass. */
+/* Screen streaks only while driving: on foot the rain stays on the far side of the glass. */
 body.is-rain.is-driving #weather-layer::after {
   content: "";
   position: absolute;

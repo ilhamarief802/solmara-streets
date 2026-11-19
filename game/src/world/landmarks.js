@@ -49,7 +49,7 @@ function buildSpire(group, plan, textures, colliders, block) {
   glass.box(cx, base + 96, cz, 24, 28, 22, colorTriple(0xdfe9ee), { uvScale: [9, 16] });
   glass.box(cx, base + 124, cz, 16, 18, 15, colorTriple(0xe6eef2), { uvScale: [8, 16] });
 
-  // Corner fins give the shaft a vertical rhythm.
+  // Corner fins give the shaft its vertical rhythm.
   for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
     accent.box(cx + sx * 15.6, base, cz + sz * 14.6, 1.2, 96, 1.2, colorTriple(0x8fa9b4), { uvScale: 4 });
     accent.box(cx + sx * 11.6, base + 96, cz + sz * 10.6, 1, 28, 1, colorTriple(0x8fa9b4), { uvScale: 4 });
@@ -191,7 +191,7 @@ function buildPier(group, plan, textures, colliders) {
   deck.box(x, 5.7, pavZ, 12, 1.2, 3, colorTriple(0xe6dcc4), { uvScale: 4 });
   addSignMesh(group, textures.neon('PIER 9', 0x8ee6ff), x, 7.4, pavZ + 8.6, 7, 1.6, 0);
 
-  // Three yachts moored east of the pier, hulls in the water.
+  // Three yachts moored east of the pier, hulls sitting in the water.
   const yachtSpecs = [
     { z: endZ - 44, length: 15, beam: 4.2, cabin: 6 },
     { z: endZ - 68, length: 20, beam: 5, cabin: 8 },
@@ -326,7 +326,7 @@ function buildBridges(group, plan, textures, colliders) {
 
   for (const bridge of plan.bridges) {
     const { width } = bridge;
-    // Eight metres of approach either side, so the deck meets the street cleanly.
+    // Eight metres of approach on either side, so the deck meets the street cleanly.
     const x0 = bridge.x0 - 8;
     const x1 = bridge.x1 + 8;
     const length = x1 - x0;

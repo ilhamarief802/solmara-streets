@@ -1,7 +1,7 @@
 // The sea and the channel, as one animated fragment shader on a single large plane. Two
 // crossing swells, a fresnel lift at glancing angles, a sun path that follows the clock's
 // sun, and manual exponential fog so the far water dissolves into the same haze as the sky.
-// No reflection pass, no normal map: cheap enough for every frame.
+// No reflection pass, no normal map: cheap enough to run every frame.
 
 import { WATER } from './plan.js';
 
@@ -34,7 +34,7 @@ const FRAGMENT = /* glsl */ `
     vec3 view = normalize(vView);
     float dist = length(vView);
 
-    // Two crossing swells plus a fine chop; the analytic derivatives give a cheap normal.
+    // Two crossing swells plus a fine chop; analytic derivatives give a cheap normal.
     vec2 p = vWorld.xz; // p.y is world z after the swizzle.
     float s1 = p.x * 0.055 + uTime * 0.85;
     float s2 = p.y * 0.041 - uTime * 0.62 + p.x * 0.02;
@@ -111,7 +111,7 @@ export function createWater(plan, options = {}) {
     uniforms.uSunDir.value.copy(palette.sunDir);
     uniforms.uHorizon.value.setRGB(...palette.skyHorizon);
     uniforms.uFogColor.value.setRGB(...palette.fogColor);
-    // The shader fogs itself, so it needs the weather's fog scale applied here too.
+    // The shader fogs itself, so the weather's fog scale has to be applied here too.
     uniforms.uFogDensity.value = palette.fogDensity * (weather?.fogMultiplier ?? 1);
     uniforms.uHaze.value = weather?.haze ?? 0.2;
 

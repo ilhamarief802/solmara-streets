@@ -1,7 +1,7 @@
 // The shot rig. A shot is a deterministic scenario: it sets the clock and weather, poses a
-// camera along a short keyframe path, warms up, then raises window.__SHOT_READY and puts its
-// short name in the title so a capture script knows the frame is stable. With no ?shot=
-// parameter the rig stays idle and the game boots normally.
+// camera along a short keyframe path, warms up, then raises window.__SHOT_READY and puts
+// its short name in the title, so a capture script knows the frame is stable. With no
+// ?shot= parameter the rig stays idle and the game boots normally.
 
 import { Random } from '../core/rng.js';
 import { easeInOutCubic, clamp01 } from '../core/math.js';
@@ -22,7 +22,7 @@ export const SHOT_NAMES = Object.keys(SHOTS);
 export function parseShotParams(search = typeof location === 'undefined' ? '' : location.search) {
   const params = new URLSearchParams(search);
   const seedValue = params.get('seed') ?? '1';
-  // Numeric seeds stay numbers so a scenario can do arithmetic on them.
+  // Numeric seeds stay numbers, so a scenario can do arithmetic on them.
   const seed = /^-?\d+$/.test(seedValue) ? Number(seedValue) : seedValue;
   return { name: params.get('shot'), seed, capture: params.get('capture') === '1' };
 }
@@ -47,7 +47,7 @@ export class ShotRig {
     this.exposure = 1;
   }
 
-  /** Starts a named shot. Returns false if the name is unknown. */
+  /** Starts a named shot. Returns false when the name is unknown. */
   start(name, seed = 1, { capture = false } = {}) {
     const scenario = SHOTS[name];
     if (!scenario) return false;
@@ -118,7 +118,7 @@ export class ShotRig {
     document.title = `${this.active.short ?? this.name} · Solmara`;
 
     if (this.capture) {
-      // The warm-up is over: freeze the simulation so the frame the shutter sees is the
+      // The warm-up is over: freeze the simulation, so the frame the shutter sees is the
       // frame every other run sees. The loop keeps rendering, so the HUD stays live.
       this.game.loop?.setPaused?.(true);
       this.game.input.enabled = false;

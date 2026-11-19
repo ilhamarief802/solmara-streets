@@ -1,6 +1,7 @@
-// The frame loop: a fixed-step simulation (60 Hz) with one render per animation frame.
-// A pause switch stops the simulation but keeps drawing, so the city can be inspected
-// while frozen. Stats are kept for the perf overlay and for the shots' warm-up check.
+// The frame loop: a fixed-step simulation at 60 Hz with one render per animation frame.
+// The pause switch stops the simulation but keeps drawing, so the frozen city can still be
+// inspected behind the menus. Frame stats are kept for the perf overlay and for the shot
+// rig's warm-up check.
 
 import { clamp } from './math.js';
 
@@ -55,12 +56,12 @@ export class GameLoop {
 
   _tick(now) {
     if (!this.running) return;
-    // Schedule first: a throw in a callback must not stop the next frame from arriving.
+    // Schedule first: a throw inside a callback must not stop the next frame arriving.
     this._raf = requestAnimationFrame(this._tick);
     const raw = (now - this._last) / 1000;
     this._last = now;
     // A backgrounded tab reports a huge gap; clamping keeps the sim from jumping. The lower
-    // bound keeps a duplicate timestamp (two rAFs in the same millisecond) from freezing it.
+    // bound keeps a duplicate timestamp (two rAFs in one millisecond) from freezing it.
     const frameSeconds = clamp(raw, 0.0005, this.maxFrameSeconds);
     this.frameMs = frameSeconds * 1000;
     this._smoothedMs += (this.frameMs - this._smoothedMs) * 0.08;
@@ -88,7 +89,7 @@ export class GameLoop {
       steps += 1;
       if (this.onUpdate) this.onUpdate(this.fixedStep, this.time);
     }
-    // A long stall (a backgrounded tab) drops its backlog instead of spiralling.
+    // After a long stall (a backgrounded tab) the backlog is dropped rather than chased.
     if (steps === this.maxUpdatesPerFrame) this.accumulator = 0;
   }
 }
@@ -98,7 +99,7 @@ export function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
-/** Waits for `count` animation frames, optionally with a callback between them. */
+/** Waits for `count` animation frames, optionally running a callback between them. */
 export async function frames(count, between = null) {
   for (let i = 0; i < count; i += 1) {
     await nextFrame();

@@ -192,7 +192,7 @@ export class CombatEffects {
       positions[offset] = x;
       positions[offset + 1] = y;
       positions[offset + 2] = z;
-      // Unused points sit exactly on the origin of the burst and are never moved.
+      // Unused points sit exactly on the burst's origin and are never moved.
       if (index >= used) {
         velocities[offset] = 0;
         velocities[offset + 1] = 0;

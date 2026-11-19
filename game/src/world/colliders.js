@@ -1,5 +1,5 @@
 // Static collision and ground data for the city. Buildings and walls register an axis-
-// aligned box; the registry buckets them in a coarse grid so a circle test near a tower
+// aligned box; the registry buckets them in a coarse grid, so a circle test near a tower
 // checks a handful of boxes, not nine hundred. The player, the cars, the bullets and the
 // camera all query it. It also answers "how high is the ground here", which is all the
 // flat city needs until the player can climb.
@@ -8,7 +8,7 @@ import { WATER } from './plan.js';
 
 const CELL = 64;
 
-/** The grid buckets by a string key; building it once per box keeps the hot query path cheap. */
+/** The grid buckets by a string key; hashing once per box keeps the hot query path cheap. */
 const cellKey = (cx, cz) => `${cx},${cz}`;
 
 export class ColliderWorld {
@@ -33,7 +33,7 @@ export class ColliderWorld {
       data,
     };
     this.boxes.push(box);
-    // The box goes in every 64 m cell it touches, so a query only walks its own cells.
+    // The box goes into every 64 m cell it touches, so a query only walks its own cells.
     for (let cz = Math.floor(box.minZ / CELL); cz <= Math.floor(box.maxZ / CELL); cz += 1) {
       for (let cx = Math.floor(box.minX / CELL); cx <= Math.floor(box.maxX / CELL); cx += 1) {
         const key = cellKey(cx, cz);
@@ -70,7 +70,7 @@ export class ColliderWorld {
         const bucket = this.grid.get(cellKey(cx, cz));
         if (!bucket) continue;
         for (const box of bucket) {
-          // A box spanning several cells is in each of them; count it once.
+          // A box spanning several cells is listed in each of them; count it once.
           if (seen.has(box.id)) continue;
           seen.add(box.id);
           found.push(box);

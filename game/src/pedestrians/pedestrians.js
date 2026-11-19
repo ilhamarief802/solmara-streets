@@ -12,7 +12,7 @@ import { clamp, dampAngle } from '../core/math.js';
 import { isWaterAt } from '../world/plan.js';
 
 const COUNT = 32;
-/** The meshes are allocated once for the largest crowd the settings can ask for. */
+/** The meshes are allocated once, for the largest crowd the settings can ask for. */
 const CAPACITY = 48;
 const CROSS_SPEED = 1.7;
 const FLEE_SPEED = 5.2;
@@ -79,7 +79,7 @@ export class PedestrianSystem {
     };
 
     // Scratch objects: draw() builds a few hundred matrices per frame and none of these
-    // allocations need to happen twice.
+    // allocations needs to happen twice.
     this.matrix = new THREE.Matrix4();
     this.position = new THREE.Vector3();
     this.scale = new THREE.Vector3();
@@ -199,8 +199,8 @@ export class PedestrianSystem {
   }
 
   /**
-   * Adds peds on the pavements around a point, walking those blocks' rings. The street shot
-   * uses this to guarantee a living crowd in the frame.
+   * Adds peds on the pavements around a point, walking those blocks' rings. The street
+   * shot uses this to guarantee a living crowd in the frame.
    */
   placeAround(x, z, count = 6, radius = 50) {
     const walk = this.world.walk;

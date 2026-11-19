@@ -1,15 +1,15 @@
 // Geometry helpers. A MeshBuilder accumulates quads, boxes, beams and cylinders into one
-// indexed BufferGeometry, so a whole district's walls or a street's furniture costs one
-// draw call. UVs are in world metres divided by a per-call scale, which keeps a brick or
-// window row the same size on every building that shares the texture. Vertex colours let
-// one material serve many tinted lots.
+// indexed BufferGeometry, so a whole district's walls or a street's furniture costs a
+// single draw call. UVs are in world metres divided by a per-call scale, which keeps a
+// brick or a window row the same size on every building that shares the texture. Vertex
+// colours let one material serve many tinted lots.
 //
-// Materials are MeshLambert: cheap, fog-aware, and with an emissive map for the lit windows
-// the clock turns up after dusk.
+// Materials are MeshLambert: cheap, fog-aware, and with an emissive map for the lit
+// windows the clock turns up after dusk.
 
 /** sRGB hex to a linear vertex-colour triple, optionally scaled. */
 export function colorTriple(hex, tint = 1) {
-  // THREE.Color converts an sRGB hex to the linear working space on construction, so
+  // THREE.Color converts an sRGB hex into the linear working space on construction, so
   // converting again here would darken every surface twice.
   const color = new THREE.Color(hex);
   return [color.r * tint, color.g * tint, color.b * tint];
@@ -51,7 +51,7 @@ export class MeshBuilder {
     return this.indices.length === 0;
   }
 
-  /** Low-level quad. Points are [x, y, z]; uvs are [u, v] per corner. */
+  /** Low-level quad. Points are [x, y, z]; uvs are one [u, v] per corner. */
   quad(p0, p1, p2, p3, normal, color, uvs) {
     const base = this.vertices;
     const points = [p0, p1, p2, p3];
@@ -102,7 +102,7 @@ export class MeshBuilder {
     const ux = 1 / uvX;
     const uy = 1 / uvY;
 
-    // +Z and -Z faces.
+    // The +Z and -Z faces.
     this.quad(
       point(-w, 0, d), point(w, 0, d), point(w, h, d), point(-w, h, d),
       [sin, 0, cos], color,
@@ -113,7 +113,7 @@ export class MeshBuilder {
       [-sin, 0, -cos], color,
       scaledUvs([[cx + w, y], [cx - w, y], [cx - w, y + h], [cx + w, y + h]], ux, uy),
     );
-    // +X and -X faces.
+    // The +X and -X faces.
     this.quad(
       point(w, 0, d), point(w, 0, -d), point(w, h, -d), point(w, h, d),
       [cos, 0, sin], color,
@@ -124,7 +124,7 @@ export class MeshBuilder {
       [-cos, 0, -sin], color,
       scaledUvs([[cz - d, y], [cz + d, y], [cz + d, y + h], [cz - d, y + h]], ux, uy),
     );
-    // The roof, laid out in world metres so its pattern lines up with the walls.
+    // The roof, laid out in world metres so its pattern lines up with the walls'.
     this.quad(
       point(-w, h, d), point(w, h, d), point(w, h, -d), point(-w, h, -d),
       [0, 1, 0], topColor,
@@ -141,7 +141,7 @@ export class MeshBuilder {
     return this;
   }
 
-  /** A box whose top footprint is scaled: one tier of a setback tower. */
+  /** A box whose top footprint is scaled down: one tier of a setback tower. */
   taperedBox(cx, y, cz, width, depth, height, topScale, color, opts = {}) {
     const [uvX, uvY] = uvPair(opts.uvScale);
     const rotY = opts.rotY ?? 0;
@@ -219,12 +219,12 @@ export class MeshBuilder {
     return this;
   }
 
-  /** A beam between two ground points, used for bridge decks, rails and highway spans. */
+  /** A beam between two ground points; used for bridge decks, rails and highway spans. */
   beam(ax, az, bx, bz, width, height, bottomY, color, opts = {}) {
     const dx = bx - ax;
     const dz = bz - az;
     const length = Math.hypot(dx, dz);
-    // A zero-length span would produce a degenerate box; skip it rather than draw nothing.
+    // A zero-length span would produce a degenerate box; skip it rather than draw rubbish.
     if (length < 0.001) return this;
     return this.box((ax + bx) / 2, bottomY, (az + bz) / 2, width, height, length, color, {
       ...opts,
@@ -319,7 +319,7 @@ export class MeshBuilder {
     this.normals.push(...other.normals);
     this.uvs.push(...other.uvs);
     this.colors.push(...other.colors);
-    // Every index has to shift by the vertices already in this builder.
+    // Every index shifts by the vertices already in this builder.
     for (const index of other.indices) this.indices.push(index + base);
     this.vertices += other.vertices;
     this.triangles += other.triangles;
@@ -370,7 +370,7 @@ export function cityMaterial(texture, options = {}) {
     emissiveIntensity: options.emissiveIntensity ?? 0,
     fog: options.fog ?? true,
   });
-  // UVs are already in world metres; the texture tiles once per metre scale.
+  // UVs already arrive in world metres; the texture tiles once per metre scale.
   if (material.map) material.map.repeat.set(1, 1);
   return material;
 }

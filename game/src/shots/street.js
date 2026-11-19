@@ -1,8 +1,8 @@
-// Shot "street": dusk on the Neon Strip, on foot, crossing the avenue. He stands on the centre
-// line of the Avenida with the junction zebra at his feet and the strip's lit fronts on both
-// sides; traffic passes him on either side and pedestrians work the pavements. The camera is
-// low on the same line, a dozen metres back, and pushes in slowly. A soft fill light lifts the
-// street out of the dusk murk for the shutter.
+// Shot "street": dusk on the Neon Strip, on foot, crossing the avenue. He stands on the
+// centre line of the Avenida with the junction zebra at his feet and the strip's lit fronts
+// on both sides; traffic passes him on either side and pedestrians work the pavements. The
+// camera is low on the same line, a dozen metres back, and pushes in slowly. A soft fill
+// light lifts the street out of the dusk murk for the shutter.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 
@@ -16,7 +16,7 @@ export default {
     clock.setHour(20.1);
     weather.set('clear');
 
-    // Out of the car if an earlier scenario left him in one.
+    // Out of the car, if an earlier scenario left him in one.
     if (game.vehicles.activeCar) game.vehicles.exit(game.player);
     game.player.teleport(210, -702, Math.PI / 2);
     game.player.character.rest();

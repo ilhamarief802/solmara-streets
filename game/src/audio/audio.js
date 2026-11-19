@@ -1,11 +1,12 @@
 // Sound, all of it synthesised at run time: there is not one audio file in the entry. The
 // engine is two detuned oscillators through a low-pass; the siren is a pair of alternating
-// tones that get faster and louder with the wanted level; the tyre squeal, gunshots, impacts
-// and footsteps are short bursts of filtered noise; and the music is a slow chord pad plus a
-// bass line generated from a small district mood table, changing with the time of day.
+// tones that get faster and louder with the wanted level; the tyre squeal, gunshots,
+// impacts and footsteps are short bursts of filtered noise; and the music is a slow chord
+// pad plus a bass line generated from a small district mood table, changing with the time
+// of day.
 //
-// Browsers refuse to start an AudioContext before a gesture, so nothing is created until the
-// first pointer or key event. Until then, every call is a cheap no-op.
+// Browsers refuse to start an AudioContext before a gesture, so nothing is created until
+// the first pointer or key event. Until then, every call is a cheap no-op.
 
 const MOODS = {
   downtown: { root: 50, chord: [0, 4, 7, 11], bass: [0, 0, 3, 5], tempo: 78, wave: 'sawtooth' },

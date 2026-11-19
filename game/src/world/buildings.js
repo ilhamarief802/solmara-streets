@@ -1,9 +1,9 @@
-// Procedural buildings. Each block is split into lots, and each lot raises a building whose
-// height, footprint, setback, roof clutter and facade come from its district record and the
-// plan's seed. Downtown leans on curtain-wall towers with tapering crowns, Verano on low
-// stucco walk-ups with awnings, the Neon Strip on dark boxes wearing signs, the harbour on
-// long warehouses. Every wall is merged into one mesh per facade variant; the lit-window
-// emissive maps are collected so the clock can turn them on at dusk.
+// Procedural buildings. Each block is split into lots, and each lot raises a building
+// whose height, footprint, setback, roof clutter and facade come from its district record
+// and the plan's seed. Downtown leans on curtain-wall towers with tapering crowns, Verano
+// on low stucco walk-ups with awnings, the Neon Strip on dark boxes wearing signs, the
+// harbour on long warehouses. Every wall is merged into one mesh per facade variant; the
+// lit-window emissive maps are collected so the clock can turn them on at dusk.
 //
 // Every random draw here happens in a fixed order, whether or not the result is used: the
 // district layout has to stay identical from one reload to the next.
@@ -72,7 +72,7 @@ function roofPlant(builder, random, cx, cz, width, depth, top, districtId) {
     );
   }
 
-  // Parapet around the roof edge, four thin walls.
+  // Parapet around the roof edge: four thin walls.
   const railColor = colorTriple(0xd8d4c8, 0.9);
   const thickness = 0.5;
   builder.box(cx, top, cz - depth / 2 + thickness / 2, width, 0.9, thickness, railColor, { uvScale: 4 });
@@ -114,7 +114,7 @@ function roofPlant(builder, random, cx, cz, width, depth, top, districtId) {
   }
 
   if (districtId === 'neon' && random.chance(0.45)) {
-    // A rooftop neon board frame: two rails with the sign panel between them.
+    // A rooftop neon board frame: two rails with the sign panel strung between them.
     builder.box(cx, top, cz, width * 0.7, 0.25, 0.25, colorTriple(0x2a2630), { uvScale: 4 });
     builder.box(cx, top + 3.4, cz, width * 0.7, 0.25, 0.25, colorTriple(0x2a2630), { uvScale: 4 });
   }
@@ -312,7 +312,7 @@ export function buildBuildings(plan, textures, colliders, options = {}) {
         const side = random.pick([-1, 1]);
         const y = Math.min(top - signHeight / 2 - 1, 4.6 + signHeight / 2 + random.range(0, 4));
         if (random.chance(0.5)) {
-          // On a Z face; rotY of PI flips the panel to face the other way.
+          // On a Z face; a rotY of PI flips the panel to face the other way.
           addSign(
             texture,
             cx + random.range(-width * 0.2, width * 0.2),

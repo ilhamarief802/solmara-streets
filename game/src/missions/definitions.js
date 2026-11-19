@@ -1,7 +1,7 @@
 // The story, as data. Five jobs in order, each a list of steps the mission system knows how
-// to run: reach a place (on foot or by car), catch a stolen car, clear a warehouse, pass five
-// checkpoints against the clock, and finish the boss on the Neon Strip. All of the writing
-// lives here so the runtime stays a small machine that reads it.
+// to run: reach a place (on foot or by car), catch a stolen car, clear a warehouse, pass
+// five checkpoints against the clock, and finish the boss on the Neon Strip. All of the
+// writing lives here so the runtime stays a small machine that reads it.
 //
 // Step types:
 //   goto        reach `marker` within `radius` (optionally by car)
@@ -11,8 +11,8 @@
 //   checkpoints pass `points` in order, against one clock
 //   escape      be clean (wanted 0) after the heat this step stirs up
 //
-// Every step may carry `time` (seconds before it fails) and `hint` (the last line of the HUD
-// mission card). All coordinates are in the plan's world metres.
+// Every step may carry `time` (seconds before it fails) and `hint` (the last line of the
+// HUD mission card). All coordinates are in the plan's world metres.
 
 export const MISSIONS = [
   {
@@ -46,7 +46,7 @@ export const MISSIONS = [
     district: 'downtown',
     start: { x: -360, z: 60 },
     startPrompt: 'Rosa wants her coupe back',
-    brief: 'A kid took Rosa\'s red coupe from the marina. Catch it before it reaches the bridges.',
+    brief: "A kid took Rosa's red coupe from the marina. Catch it before it reaches the bridges.",
     reward: 1200,
     dialogue: [
       { who: 'Rosa', line: 'The red coupe. Gone. Some kid drove it off the lot ten minutes ago.' },
@@ -70,7 +70,7 @@ export const MISSIONS = [
     district: 'harbour',
     start: { x: -360, z: 60 },
     startPrompt: 'Rosa has a warehouse problem',
-    brief: 'Four of Voss\'s men are sitting on Rosa\'s crate at the harbour. Clear the warehouse.',
+    brief: "Four of Voss's men are sitting on Rosa's crate at the harbour. Clear the warehouse.",
     reward: 1800,
     dialogue: [
       { who: 'Rosa', line: 'They found the crate. Four men, harbour warehouses, Pier 9 side.' },

@@ -1,7 +1,7 @@
 // WebGL renderer setup. One canvas, sRGB output, ACES tone mapping, a pixel ratio cap and
 // a resize handler that keeps the drawing buffer in step with the window. Shadow maps stay
 // off unless the quality preset explicitly allows them; nothing else in the render path
-// costs a second pass.
+// pays for a second pass.
 
 /**
  * Probes the renderer string on a throwaway context. Software rasterisers (SwiftShader,
@@ -26,8 +26,8 @@ function detectSoftwareRenderer() {
 }
 
 export function createRenderer(canvas, settings) {
-  // A shot may render at 0.85 on software for a cleaner capture; normal play drops to
-  // 0.55 so a CPU rasteriser can still hold a useful frame rate.
+  // A shot may still render at 0.85 on software for a cleaner capture; normal play drops
+  // to 0.55 so a CPU rasteriser can hold a useful frame rate.
   const software = detectSoftwareRenderer();
   if (software) {
     settings.software = true;
@@ -56,7 +56,7 @@ export function createRenderer(canvas, settings) {
   renderer.userData.software = software;
 
   const resize = () => {
-    // Never let a collapsed window produce a zero-sized drawing buffer.
+    // A collapsed window must never produce a zero-sized drawing buffer.
     const width = Math.max(320, window.innerWidth);
     const height = Math.max(240, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, settings.pixelRatioCap) * settings.renderScale);
@@ -73,7 +73,7 @@ export function createRenderer(canvas, settings) {
 }
 
 export function setExposure(renderer, exposure) {
-  // Only touch the renderer when it would actually change: this runs every frame.
+  // Only touch the renderer when the value would actually change: this runs every frame.
   if (Math.abs(renderer.toneMappingExposure - exposure) > 0.002) renderer.toneMappingExposure = exposure;
 }
 

@@ -1,7 +1,7 @@
-// Shot "chase": three stars and three cruisers. The player's coupe runs north up the Avenida
-// with a cruiser on each shoulder and a third hanging back, lights strobing, the HUD stars lit
-// and the minimap showing the pursuit. The camera rides ahead of the pack and looks back down
-// the boulevard, so the whole chase is in one frame.
+// Shot "chase": three stars and three cruisers. The player's coupe runs north up the
+// Avenida with a cruiser on each shoulder and a third hanging back, lights strobing, the
+// HUD stars lit and the minimap showing the pursuit. The camera rides ahead of the pack and
+// looks back down the boulevard, so the whole chase is in one frame.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 

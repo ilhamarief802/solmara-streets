@@ -1,8 +1,8 @@
 // The front end: a start screen over the paused city, an Escape pause menu, the settings
 // panel every other screen shares, and the two story cards (wasted/busted, mission
-// complete). It is plain DOM above the canvas, so it works before pointer lock, without the
-// WebGL context and with a mouse or the arrow keys: every button is reachable by Tab, Enter,
-// and Escape returns one screen, never to a dead end.
+// complete). It is plain DOM above the canvas, so it works before pointer lock, without
+// the WebGL context and with a mouse or the arrow keys: every button is reachable by Tab,
+// Enter, and Escape returns one screen, never to a dead end.
 //
 // The menu never simulates the game. It pauses the loop, lets the last frame stay on the
 // canvas behind a scrim, and resumes when the player chooses. The shot rig hides it.

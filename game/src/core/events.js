@@ -1,5 +1,5 @@
-// A tiny synchronous event bus. Systems talk through this instead of importing each
-// other, so a new one can be added without editing the ones already written.
+// A small synchronous event bus. Systems talk through this instead of importing one
+// another, so a new system can be added without touching the ones already written.
 
 export class EventBus {
   constructor() {
@@ -7,7 +7,7 @@ export class EventBus {
     this.emitted = 0;
   }
 
-  /** Subscribes; returns an unsubscribe function. */
+  /** Subscribes a handler; returns an unsubscribe function. */
   on(type, handler) {
     let list = this.listeners.get(type);
     if (!list) {
@@ -35,12 +35,12 @@ export class EventBus {
     if (!list.length) this.listeners.delete(type);
   }
 
-  /** Calls every listener for a type. A throwing listener must not stop the rest. */
+  /** Calls every listener for a type. One throwing listener must not stop the rest. */
   emit(type, payload) {
     this.emitted += 1;
     const list = this.listeners.get(type);
     if (!list || !list.length) return;
-    // Iterate a copy: a listener is allowed to unsubscribe itself mid-emit.
+    // Iterate over a copy: a listener may unsubscribe itself in the middle of the emit.
     for (const handler of list.slice()) {
       try {
         handler(payload);
@@ -60,5 +60,5 @@ export class EventBus {
   }
 }
 
-/** The game-wide bus. */
+/** The one game-wide bus. */
 export const bus = new EventBus();

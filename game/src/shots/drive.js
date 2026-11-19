@@ -1,7 +1,7 @@
-// Shot "drive": the player has just taken the teal coupe from the kerb on the Avenida Sol and
-// is rolling north through the downtown core, traffic ahead and the towers over the bonnet.
-// The camera sits low behind the off-side quarter and drifts in over the warm-up, then holds.
-// The car keeps a light throttle on autopilot, so the frame is a moving one.
+// Shot "drive": the player has just taken the teal coupe from the kerb on the Avenida Sol
+// and is rolling north through the downtown core, traffic ahead and the towers over the
+// bonnet. The camera sits low behind the off-side quarter and drifts in over the warm-up,
+// then holds. The car keeps a light throttle on autopilot, so the frame is a moving one.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 

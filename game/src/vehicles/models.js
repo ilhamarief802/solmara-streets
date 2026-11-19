@@ -4,8 +4,8 @@
 // geometry that bakes its own colours: glass, bumpers, lights, grille, livery.
 //
 // Two consumption modes: buildCarGroup() for the one car the player drives (real wheels
-// that spin, a paint material), and per-type geometries for the instanced fleet traffic and
-// parked cars use.
+// that spin, a paint material), and per-type geometries for the instanced fleet that
+// traffic and the parked cars use.
 
 /** A soup of coloured triangles. No indices, no UVs: flat car panels do not need them. */
 class Soup {
@@ -72,7 +72,7 @@ class Soup {
       return;
     }
 
-    // Six faces of a box, wound outward.
+    // The six faces of a box, wound outward.
     this.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], color);
     this.quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], color);
     this.quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], color);
@@ -220,7 +220,7 @@ function van() {
   soup.box(0, 0.3, 0, 1.78, 0.14, 4.5, color(DARK));
   // A short sloped nose, then the flat sides.
   soup.box(0, 1.34, 2.05, 1.9, 0.72, 0.9, WHITE, { topW: 1.75, topD: 0.6, shiftZ: -0.2 });
-  // Windscreen, then the two side windows.
+  // The windscreen, then the two side windows.
   soup.box(0, 1.3, 2.52, 1.76, 0.5, 0.08, color(GLASS));
   for (const sx of [-1, 1]) {
     soup.box(sx * 0.99, 1.44, 0.75, 0.06, 0.46, 1.5, color(GLASS));
@@ -318,7 +318,7 @@ function buggy() {
 
 const BUILDERS = { sedan, coupe, van, taxi, police, buggy };
 
-/** The traffic mix: sedans are the city's default, taxis and vans fill the rest. */
+/** The traffic mix: sedans are the city's default; taxis and vans fill out the rest. */
 export const TRAFFIC_MIX = [
   { type: 'sedan', weight: 34 },
   { type: 'coupe', weight: 16 },
@@ -343,8 +343,8 @@ export const CAR_TYPES = Object.keys(BUILDERS);
 export { TYPE_PAINT };
 
 /**
- * Splits a body soup into a painted shell and baked-colour details. The builders write body
- * panels as pure white, so one colour test separates them.
+ * Splits a body soup into a painted shell and baked-colour details. The builders write
+ * body panels as pure white, so one colour test separates them.
  */
 function splitShell(soup) {
   const shell = new Soup();
@@ -374,8 +374,8 @@ export function getCarModel(type) {
   const { soup, dims } = BUILDERS[key]();
   const { shell, details } = splitShell(soup);
 
-  // One wheel at the origin, for the player's car to spin, plus the static set for the fleet
-  // and the parked cars.
+  // One wheel at the origin, for the player's car to spin, plus the static set for the
+  // fleet and the parked cars.
   const wheelGeometry = new Soup();
   wheelGeometry.wheel(0, dims.wheelRadius, 0, dims.wheelRadius, 0.28, color(DARK), color(HUB));
 
@@ -413,7 +413,7 @@ export function buildCarGroup(type, paint = 0xb8bcc0) {
   const group = new THREE.Group();
   group.name = `car-${model.type}`;
 
-  // The hero car carries a little self-illumination so its paint reads after sunset.
+  // The hero car carries a little self-illumination, so its paint reads after sunset.
   const paintMaterial = new THREE.MeshLambertMaterial({
     color: paint,
     vertexColors: true,
@@ -425,7 +425,7 @@ export function buildCarGroup(type, paint = 0xb8bcc0) {
   const details = new THREE.Mesh(model.details, new THREE.MeshLambertMaterial({ vertexColors: true }));
   group.add(details);
 
-  // Every wheel shares one geometry and one material: the offsets live on the meshes.
+  // Every wheel shares one geometry and one material: only the offsets live on the meshes.
   const wheelMaterial = new THREE.MeshLambertMaterial({ vertexColors: true });
   const wheels = model.wheelOffsets.map((offset) => {
     const wheel = new THREE.Mesh(model.wheelGeometry, wheelMaterial);

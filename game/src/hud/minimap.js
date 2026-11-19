@@ -1,4 +1,4 @@
-// The minimap: one offscreen canvas holding the whole city drawn once from the plan's own
+// The minimap: one offscreen canvas holding the whole city, drawn once from the plan's own
 // geometry (blocks, roads, the ring highway and the two coasts), then a small live canvas
 // that slides a window of that map under the player each frame. North is up, the player
 // arrow turns, and the map keeps its landmarks readable when the HUD is scaled down: thick
@@ -87,8 +87,8 @@ export class Minimap {
       ctx.fillRect(mx(block.x0), mz(block.z0), (block.x1 - block.x0) * scale, (block.z1 - block.z0) * scale);
     }
 
-    // Streets, then the elevated ring over them with a dark casing so it reads as a
-    // different tier, not a wider street.
+    // Streets, then the elevated ring over them with a dark casing, so it reads as a
+    // different tier rather than a wider street.
     ctx.lineCap = 'round';
     ctx.strokeStyle = ROAD;
     for (const road of this.world.minimap.roads) {
@@ -122,7 +122,7 @@ export class Minimap {
       ctx.fillRect(mx(water.x0), mz(water.z0), (water.x1 - water.x0) * scale, (water.z1 - water.z0) * scale);
     }
 
-    // The coastline: west and south shores, then the channel mouth as two quay lines.
+    // The coastline: the west and south shores, then the channel mouth as two quay lines.
     ctx.strokeStyle = COAST;
     ctx.lineWidth = 1.4;
     ctx.beginPath();
@@ -179,7 +179,7 @@ export class Minimap {
     ctx.fillRect(0, 0, size, size);
     ctx.drawImage(this.staticCanvas, sx, sz, sourceSize, sourceSize, 0, 0, size, size);
 
-    // A soft vignette so the dots near the edge do not fight the border.
+    // A soft vignette, so the dots near the edge do not fight the border.
     const vignette = ctx.createRadialGradient(size / 2, size / 2, size * 0.3, size / 2, size / 2, size * 0.62);
     vignette.addColorStop(0, 'rgba(0,0,0,0)');
     vignette.addColorStop(1, 'rgba(4, 8, 12, 0.55)');
@@ -257,7 +257,7 @@ export class Minimap {
     ctx.stroke();
     ctx.restore();
 
-    // North is fixed, because the map is north-up.
+    // North stays fixed, because the map is north-up.
     ctx.fillStyle = LANDMARK_PIP;
     ctx.font = '600 10px ui-monospace, monospace';
     ctx.textAlign = 'center';

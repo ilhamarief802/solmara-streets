@@ -72,7 +72,7 @@ function normalise(payload) {
   save.health = clamp(Number(save.health) || 100, 0, 100);
   save.armour = clamp(Number(save.armour) || 0, 0, 100);
   if (save.settings && typeof save.settings !== 'object') save.settings = null;
-  // A position without a usable x is worthless; drop the whole record.
+  // A position without a usable x is worthless; the whole record is dropped.
   if (save.position && !Number.isFinite(Number(save.position.x))) save.position = null;
   return save;
 }
@@ -101,7 +101,7 @@ export function hasSave() {
 
 /**
  * Merges a partial snapshot into the record and writes it. A field left out keeps the value
- * already on disk, so the menu can save settings without clobbering the wallet and the
+ * already on disk, so the menu can save settings without clobbering the wallet, and the
  * mission system can save the wallet without clobbering the position.
  */
 export function writeSave(partial = {}) {
@@ -139,7 +139,7 @@ export function snapshotGame(game) {
       x: Number(player?.position.x ?? 0),
       z: Number(player?.position.z ?? 0),
       heading: Number(player?.heading ?? 0),
-      // A car is only recorded when the player is sitting in one.
+      // A car is only recorded while the player is actually sitting in one.
       car: car ? { type: car.type, paint: car.paint, x: car.x, z: car.z, heading: car.heading } : null,
     },
   };
@@ -179,7 +179,7 @@ export function restoreGame(save, game) {
     missions.completed = [...(save.completed ?? [])];
   }
   if (combat) {
-    // A restored player is always on their feet, with at least one point of health.
+    // A restored player is always back on their feet, with at least one point of health.
     combat.health = Math.max(1, Math.min(100, save.health ?? 100));
     combat.armour = Math.max(0, Math.min(100, save.armour ?? 0));
     combat.downKind = null;

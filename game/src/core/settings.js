@@ -1,5 +1,5 @@
-// Settings read once from the URL, then owned by the settings screen. The defaults are the
-// safe ones: no shadow maps, no post processing, a capped pixel ratio, thirty cars and
+// Settings are read once from the URL, then owned by the settings screen. The defaults are
+// the safe ones: no shadow maps, no post processing, a capped pixel ratio, thirty cars and
 // thirty-two people. Nothing here is required for the game to run, but the shot rig, the
 // menus and the save file all read and write the same object.
 

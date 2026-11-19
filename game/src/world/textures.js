@@ -221,7 +221,7 @@ export class TextureLibrary {
       ctx.fillRect(0, 0, size, size);
       blotch(ctx, random, size, size, 30, 0x4f6a34, 0.3);
       blotch(ctx, random, size, size, 18, 0x93a95e, 0.2);
-      // Short blades rather than dots: grass needs vertical grain.
+      // Short blades rather than dots: grass needs its vertical grain.
       for (let i = 0; i < 2600; i += 1) {
         ctx.fillStyle = hex(random.pick([0x567239, 0x7e9a54, 0x48602f, 0x9aae68]));
         ctx.globalAlpha = random.range(0.2, 0.6);
@@ -295,7 +295,7 @@ export class TextureLibrary {
       const tone = random.pick([0x7d6142, 0xb08e63, 0x8b6d4b]);
       ctx.fillStyle = hex(mixHex(0x9a7b55, tone, random.range(0.2, 0.7)));
       ctx.fillRect(0, y, width, plank - 3);
-      // The shadow gap between planks.
+      // The shadow gap between the planks.
       ctx.fillStyle = 'rgba(60, 44, 30, 0.55)';
       ctx.fillRect(0, y + plank - 3, width, 3);
       // A few grain lines, then the two fixing nails.
@@ -372,7 +372,7 @@ export class TextureLibrary {
     lightCtx.fillStyle = '#000000';
     lightCtx.fillRect(0, 0, width, height);
 
-    // A storefront band at the bottom of the texture.
+    // A storefront band along the bottom of the texture.
     const shopTop = height - 96;
     ctx.fillStyle = hex(mixHex(wall, 0x000000, 0.28));
     ctx.fillRect(0, shopTop, width, 96);
@@ -396,7 +396,7 @@ export class TextureLibrary {
         const w = gapX * 0.68;
         const h = rowHeight * 0.58;
         // The lit decision comes from its own stream, so the map and the emissive map
-        // agree without reading one another.
+        // agree without having to read one another.
         const lit = lightRandom.chance(litChance);
         const glassTint = random.pick(cool);
         ctx.fillStyle = hex(lit ? random.pick(warm) : mixHex(palette.glass, glassTint, random.range(0, 0.4)));
@@ -404,7 +404,7 @@ export class TextureLibrary {
         ctx.strokeStyle = hex(mixHex(wall, 0x000000, 0.45));
         ctx.lineWidth = 2;
         ctx.strokeRect(x, y, w, h);
-        // A sill, and a little balcony on the residential districts.
+        // A sill, and a small balcony on the residential districts.
         ctx.fillStyle = hex(mixHex(wall, 0xffffff, 0.14));
         ctx.fillRect(x - 2, y + h, w + 4, 3);
         if (districtId === 'verano' && row % 3 === 1) {
@@ -463,7 +463,7 @@ export class TextureLibrary {
     lightCtx.fillStyle = '#000';
     lightCtx.fillRect(0, 0, width, height);
 
-    // Sky reflection down the wall.
+    // Sky reflection running down the wall.
     const [r, g, b] = channels(base);
     const gradient = ctx.createLinearGradient(0, 0, width, height);
     gradient.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.10)`);
@@ -576,7 +576,7 @@ export class TextureLibrary {
     }
     ctx.shadowBlur = 0;
 
-    // Scanlines so a sign reads as a lit tube, not a flat decal.
+    // Scanlines, so a sign reads as a lit tube rather than a flat decal.
     ctx.globalAlpha = 0.18;
     ctx.fillStyle = '#000';
     for (let y = 0; y < height; y += 4) ctx.fillRect(0, y, width, 1);

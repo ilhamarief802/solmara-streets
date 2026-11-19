@@ -1,5 +1,5 @@
 // Small maths helpers shared by the city generator, the camera rigs, the player and the
-// traffic. Dependency-free on purpose: importing this can never drag in a system.
+// traffic. Deliberately dependency-free: importing this module can never drag in a system.
 
 export const TAU = Math.PI * 2;
 export const DEG = Math.PI / 180;
@@ -87,7 +87,7 @@ export function valueNoise2D(x, z, seed = 0) {
   const zi = Math.floor(z);
   const xf = x - xi;
   const zf = z - zi;
-  // Smooth the lattice fractions so the field is continuous across cell borders.
+  // Smooth the lattice fractions so the field stays continuous across cell borders.
   const u = xf * xf * (3 - 2 * xf);
   const v = zf * zf * (3 - 2 * zf);
   const top = lerp(hash2D(xi, zi, seed), hash2D(xi + 1, zi, seed), u);
@@ -105,7 +105,7 @@ export function fbm2D(x, z, octaves = 3, seed = 0) {
     sum += valueNoise2D(x * frequency, z * frequency, seed + i * 97) * amplitude;
     norm += amplitude;
     amplitude *= 0.5;
-    // Non-integer step keeps the octaves from lining up into visible grids.
+    // A non-integer step keeps the octaves from lining up into visible grids.
     frequency *= 2.03;
   }
   return sum / norm;
@@ -131,7 +131,7 @@ export function sampleStops(stops, at, keys = null) {
     const bv = b[key];
     if (typeof av === 'number') out[key] = lerp(av, bv, t);
     else if (Array.isArray(av)) out[key] = av.map((value, i) => lerp(value, bv[i], t));
-    // Flags and labels switch at the midpoint rather than interpolating.
+    // Flags and labels switch at the midpoint instead of interpolating.
     else out[key] = t < 0.5 ? av : bv;
   }
   return out;

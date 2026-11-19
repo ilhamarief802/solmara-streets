@@ -1,8 +1,8 @@
 // One police cruiser. It is a real body on the road graph, not a traffic agent: it picks the
 // lane that points most directly at the player, takes the junction that shortens the chase,
 // and only leaves the graph for the last thirty metres, when it steers straight at the
-// player. That keeps it on the road (no wall-grinding) while the final approach feels like a
-// pursuit. Roadblock cruisers are the same class with `mode = 'block'`.
+// player. That keeps it on the road (no wall-grinding) while the final approach feels like
+// a pursuit. Roadblock cruisers are the same class with `mode = 'block'`.
 
 import { clamp, dampAngle, angleDelta, yawToward } from '../core/math.js';
 
@@ -26,7 +26,7 @@ export class PursuitCruiser {
     this.waypoint = { x, z };
     this.retarget = 0;
     this.ramCooldown = 0;
-    // A per-cruiser offset so a group of cruisers does not strobe in lockstep.
+    // A per-cruiser offset, so a group of cruisers does not strobe in lockstep.
     this.blink = Math.random() * 10;
     this.stuckClock = 0;
     this.lastX = x;
@@ -104,7 +104,7 @@ export class PursuitCruiser {
     return best ?? PursuitCruiser.nearestLane(this.world, player.x, player.z).lane;
   }
 
-  /** Puts the cruiser at the middle of a lane, pointing down it. */
+  /** Puts the cruiser in the middle of a lane, pointing down it. */
   static fromLane(world, lane, along = null, mode = 'chase') {
     const s = along ?? lane.length * 0.5;
     return new PursuitCruiser({

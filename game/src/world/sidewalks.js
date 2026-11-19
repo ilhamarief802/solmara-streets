@@ -1,8 +1,8 @@
-// The walkable city. The road graph is for cars; this is the pedestrian layer on top of the
-// same plan: the pavement ring around every block, the crossing links that join two rings
-// at a signalised corner, the kerbside parking spots the car system fills, and the one
-// surface query everything standing on the ground shares ("what is under me, and how high
-// is it"). Pure data and small helpers, no meshes.
+// The walkable city. The road graph is for cars; this is the pedestrian layer on top of
+// the same plan: the pavement ring around every block, the crossing links that join two
+// rings at a signalised corner, the kerbside parking spots the car system fills, and the
+// one surface query everything standing on the ground shares ("what is under me, and how
+// high is it"). Pure data and small helpers, no meshes.
 
 import { Random } from '../core/rng.js';
 import { GRID, WATER, isSandAt, isWaterAt } from './plan.js';
@@ -81,7 +81,7 @@ export function createWalkNetwork(plan, colliders = null) {
     return plan.nodeById.get(`n-${i}-${j}`) ?? null;
   }
 
-  // Walking straight off each corner lands on this neighbouring cell and that corner of it.
+  // Walking straight off each corner lands in this neighbouring cell, at this corner of it.
   const CROSSING_TARGETS = [
     { di: 0, dj: -1, corner: 3 },
     { di: 1, dj: 0, corner: 0 },
@@ -91,8 +91,8 @@ export function createWalkNetwork(plan, colliders = null) {
 
   /**
    * Where a pedestrian at a ring corner would step to cross the street straight ahead: the
-   * ring corner of the block across the road, or null when there is no block, no signal, or
-   * the water is in the way.
+   * ring corner of the block across the road, or null when there is no block, no signal,
+   * or the water is in the way.
    */
   function crossingFrom(block, corner) {
     const node = cornerNode(block, corner);

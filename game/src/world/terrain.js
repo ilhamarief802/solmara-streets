@@ -30,7 +30,7 @@ export function buildTerrain(plan, textures, options = {}) {
 
   // ---------------------------------------------------------------- land base
   // Two large pieces either side of the channel, plus the northern cap over the channel's
-  // head, leaves the channel and the sea uncovered. The land rectangle is inset from the
+  // head. The channel and the sea stay uncovered; the land rectangle is inset from the
   // plan bounds so the sea shows at every edge.
   const north = -975;
   const south = 638;
@@ -63,7 +63,7 @@ export function buildTerrain(plan, textures, options = {}) {
     colorTriple(0xd7c299),
     { uvScale: 10 },
   );
-  // A wet strip at the waterline, darker and slightly lower.
+  // A wet strip at the waterline: darker and slightly lower than the dry sand.
   sand.plane(beachMidX, WATER.seaSouthZ - 6, beachWidth, 12, 0.004, colorTriple(0xb49d78), { uvScale: 8 });
   // The promenade and the boardwalk.
   concrete.plane(
@@ -116,7 +116,7 @@ export function buildTerrain(plan, textures, options = {}) {
   for (let i = 0; i < 12; i += 1) {
     const x = random.range(AIRSTRIP.x0 + 20, AIRSTRIP.x1 - 20);
     const z = random.range(AIRSTRIP.z0 + 20, AIRSTRIP.z1 - 20);
-    // A pool under the runway would read as a hole in the strip; skip the corridor.
+    // A pool under the runway would read as a hole in the strip; the corridor is skipped.
     if (Math.abs(x - AIRSTRIP.runwayX) < 40) continue;
     marsh.plane(x, z, random.range(18, 60), random.range(10, 34), 0.02, reeds, {
       uvScale: 6,
@@ -151,7 +151,7 @@ export function buildTerrain(plan, textures, options = {}) {
     const w = inner.x1 - inner.x0;
     const d = inner.z1 - inner.z0;
     grass.plane(block.cx, block.cz, w, d, 0.012, colorTriple(0x6f8a4a), { uvScale: 7 });
-    // A cross of paths, one north-south and one east-west.
+    // A cross of paths: one north-south, one east-west.
     concrete.plane(block.cx, block.cz, w, 5, 0.02, colorTriple(0xbcb39e), { uvScale: 3 });
     concrete.plane(block.cx, block.cz, 5, d, 0.02, colorTriple(0xbcb39e), { uvScale: 3 });
   }

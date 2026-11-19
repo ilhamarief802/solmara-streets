@@ -1,8 +1,8 @@
 // Street life at ground level: palms, streetlights that come on at dusk, benches, bins,
-// hydrants, market stalls, planters, parked cars and the working traffic signals. Props are
-// placed by walking each block's pavement ring from a seeded stream, so a district's prop
-// mix is its own. Models merge into a few meshes; the lamp heads and signal lenses are
-// InstancedMeshes, which is what makes hundreds of small lights affordable.
+// hydrants, market stalls, planters, parked cars and the working traffic signals. Props
+// are placed by walking each block's pavement ring from a seeded stream, so a district's
+// prop mix is its own. Models merge into a few meshes; the lamp heads and signal lenses
+// are InstancedMeshes, which is what makes hundreds of small lights affordable.
 
 import { MeshBuilder, cityMaterial, colorTriple } from './geometry.js';
 import { Random } from '../core/rng.js';
@@ -16,8 +16,8 @@ const IRON = 0x2f3437;
 const WATERLINE = 640;
 
 /**
- * The signal cycle: green, amber, red, with a per-junction offset. These three numbers must
- * match the ones traffic.js uses, or cars and lamps disagree at the lights.
+ * The signal cycle: green, amber, red, with a per-junction offset. These three numbers
+ * must match the ones traffic.js uses, or cars and lamps disagree at the lights.
  */
 export class TrafficSignals {
   constructor(heads) {
@@ -74,7 +74,7 @@ function palm(builder, leaves, x, z, height, random, colliders) {
     const droop = random.range(0.8, 2.2);
     const dx = Math.cos(angle);
     const dz = Math.sin(angle);
-    // Perpendicular, for the width of the frond at its root and its tip.
+    // Perpendicular, for the width of the frond at its root and at its tip.
     const px = -dz;
     const pz = dx;
     const baseY = height + 0.2;
@@ -98,7 +98,7 @@ function streetlight(iron, x, z, rotY, lamps, glowPools, random) {
   iron.cylinder(x, z, 0.16, height, 0, 6, colorTriple(IRON), { topRadius: 0.1, uvScale: 3 });
   iron.box(x, height - 0.3, z, 0.4, 0.4, 0.4, colorTriple(IRON), { uvScale: 2 });
 
-  // The arm reaches over the road in the direction the kerb faces.
+  // The arm reaches over the road, in the direction the kerb faces.
   const armLength = 2.2;
   const lx = x + Math.sin(rotY) * armLength;
   const lz = z + Math.cos(rotY) * armLength;
@@ -225,7 +225,7 @@ export function buildProps(plan, textures, colliders, options = {}) {
     const district = districtOf(block.district);
     const mix = district.props;
 
-    // The four kerb lines, each with the outward normal the props face.
+    // The four kerb lines, each with the outward normal its props face.
     const sides = [
       { x0: block.x0 + inset, z0: block.z0 + inset, x1: block.x1 - inset, z1: block.z0 + inset, nx: 0, nz: -1 },
       { x0: block.x0 + inset, z0: block.z1 - inset, x1: block.x1 - inset, z1: block.z1 - inset, nx: 0, nz: 1 },
@@ -233,9 +233,9 @@ export function buildProps(plan, textures, colliders, options = {}) {
       { x0: block.x1 - inset, z0: block.z0 + inset, x1: block.x1 - inset, z1: block.z1 - inset, nx: 1, nz: 0 },
     ];
 
-    // Cumulative thresholds over one roll per station. Order is the priority order: a lamp
-    // beats a palm, a palm beats a bench, and so on down to the planters. A handler that
-    // counts its own prop returns false so the loop does not count it twice.
+    // Cumulative thresholds over one roll per station. The order is the priority order: a
+    // lamp beats a palm, a palm beats a bench, and so on down to the planters. A handler
+    // that counts its own prop returns false, so the loop does not count it twice.
     const bands = [];
     let edge = 0;
     const band = (width, place) => {
@@ -301,8 +301,8 @@ export function buildProps(plan, textures, colliders, options = {}) {
   }
 
   // ------------------------------------------------------------- beach extras
-  // Palms down the promenade, benches facing the water and stalls behind them. The beach is
-  // the city's postcard, so it carries more props than its density suggests.
+  // Palms down the promenade, benches facing the water and stalls behind them. The beach
+  // is the city's postcard, so it carries more props than its density suggests.
   for (let x = BEACH.x0 + 12; x <= BEACH.x1 - 10; x += 26) {
     // Leave the pier approach clear.
     if (x > BEACH.pierX - 12 && x < BEACH.pierX + 12) continue;
@@ -449,7 +449,7 @@ export function buildProps(plan, textures, colliders, options = {}) {
   let nightFactor = 0;
   function update(dt, context = {}) {
     signals.update(dt, lensMesh, colorSets);
-    // Lamps warm up as the night comes in; the pools ride the same factor.
+    // The lamps warm up as night comes in; the pools ride the same factor.
     nightFactor += (clamp(context.night ?? 0, 0, 1) - nightFactor) * Math.min(1, dt * 2.5);
     lampMaterial.opacity = 0.15 + nightFactor * 0.85;
     lampMaterial.color.setRGB(1, 0.78 + nightFactor * 0.08, 0.5 + nightFactor * 0.1);

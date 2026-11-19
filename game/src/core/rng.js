@@ -1,5 +1,5 @@
-// Deterministic randomness. Every district, block, window and palm in Solmara comes out
-// of these streams, so the same seed always produces the same city. Nothing here touches
+// Deterministic randomness. Every district, block, window and palm in Solmara comes out of
+// one of these streams, so the same seed always builds the same city. Nothing here touches
 // Math.random: a shot has to be reproducible frame for frame.
 
 /** Turns a short label into a 32-bit seed, FNV-1a style. */
@@ -13,7 +13,7 @@ export function hashLabel(label) {
   return hash >>> 0;
 }
 
-/** mulberry32: small, fast, and plenty for city planning. */
+/** mulberry32: small, fast, and more than good enough for city planning. */
 export function mulberry32(seed) {
   let state = seed >>> 0;
   return function next() {
@@ -26,8 +26,8 @@ export function mulberry32(seed) {
 }
 
 /**
- * A named random stream. `fork(label)` gives an independent child stream, which is how
- * the plan, each district's props and each shot keep out of each other's way.
+ * A named random stream. `fork(label)` returns an independent child stream, which is how
+ * the city plan, each district's props and each shot stay out of each other's way.
  */
 export class Random {
   constructor(seed = 'solmara') {
@@ -36,7 +36,7 @@ export class Random {
     this.calls = 0;
   }
 
-  /** [0, 1). */
+  /** A float in [0, 1). */
   float() {
     this.calls += 1;
     return this.next();
@@ -63,12 +63,12 @@ export class Random {
     return list[this.int(0, list.length - 1)];
   }
 
-  /** -1 or 1. */
+  /** Either -1 or 1. */
   sign() {
     return this.float() < 0.5 ? -1 : 1;
   }
 
-  /** Uniform in [-1, 1]. */
+  /** A uniform float in [-1, 1]. */
   signed() {
     return this.float() * 2 - 1;
   }

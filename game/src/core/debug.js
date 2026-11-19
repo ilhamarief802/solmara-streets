@@ -9,7 +9,7 @@ export function installErrorOverlay(doc = document) {
   const root = doc.getElementById('error-overlay');
   const body = doc.getElementById('error-body');
   const errors = [];
-  // The browser check reads this array, so a swallowed fault is still countable.
+  // The browser check reads this array, so even a swallowed fault stays countable.
   window.__SOLMARA_ERRORS = errors;
 
   const show = (kind, detail) => {
@@ -66,7 +66,7 @@ export class PerfOverlay {
     this.accumulator += dt;
     this.worstMs = Math.max(this.worstMs, dt * 1000);
     this.averageMs += (dt * 1000 - this.averageMs) * 0.06;
-    // Four updates a second is enough to read and cheap enough to leave on.
+    // Four updates a second is enough to read and cheap enough to leave switched on.
     if (!this.visible || !this.el || this.accumulator < 0.25) return;
     const fps = this.frames / this.accumulator;
     const info = this.renderer?.info;
@@ -93,13 +93,13 @@ export function hideBootCard() {
   const boot = document.getElementById('boot');
   if (!boot) return;
   boot.classList.add('is-hidden');
-  // `hidden` only after the fade, so the card cannot flash back into the layout.
+  // `hidden` is only set after the fade, so the card cannot flash back into the layout.
   setTimeout(() => {
     boot.hidden = true;
   }, 900);
 }
 
-/** A plain text block in the corner, for the debug camera and shot labels. */
+/** A plain text block in the corner, for the debug camera and the shot labels. */
 export class DebugReadout {
   constructor(element = document.getElementById('debug-readout')) {
     this.el = element;

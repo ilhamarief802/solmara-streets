@@ -1,8 +1,8 @@
-// Shot "cover": the money frame. A stolen teal coupe on the Avenida Sol at golden hour, seen
-// from low behind its off-side quarter; traffic runs with it, pedestrians work the pavement,
-// the HUD carries money and the minimap, and the downtown towers close the far end of the
-// boulevard behind a low sun. The camera pushes in a hand's width over the warm-up and then
-// holds for the shutter.
+// Shot "cover": the money frame. A stolen teal coupe on the Avenida Sol at golden hour,
+// seen from low behind its off-side quarter; traffic runs with it, pedestrians work the
+// pavement, the HUD carries money and the minimap, and the downtown towers close the far
+// end of the boulevard behind a low sun. The camera pushes in a hand's width over the
+// warm-up and then holds for the shutter.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 

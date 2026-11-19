@@ -1,8 +1,8 @@
-// The driven car. An arcade model, not a simulator: longitudinal thrust and drag, a steering
-// angle that shrinks with speed, and a lateral velocity that asphalt grips hard and sand
-// barely does. The handbrake drops grip and lets the tail step out, which is the whole point
-// of a city car. Collision is a circle against the world boxes; a hit bleeds speed and
-// throws a small camera kick.
+// The driven car. An arcade model, not a simulator: longitudinal thrust and drag, a
+// steering angle that shrinks with speed, and a lateral velocity that asphalt grips hard
+// and sand barely does. The handbrake drops grip and lets the tail step out, which is the
+// whole point of a city car. Collision is a circle against the world boxes; a hit bleeds
+// speed and throws a small camera kick.
 
 import { clamp, damp } from '../core/math.js';
 import { bus } from '../core/events.js';
@@ -153,7 +153,7 @@ export class Car {
     this.z = resolved.z;
 
     if (blocked) {
-      // A wall takes most of the speed; the rest is a scrape along it.
+      // A wall takes most of the speed; the rest becomes a scrape along it.
       const impact = Math.abs(vLong);
       vLong *= -0.16;
       vLat *= 0.4;
@@ -189,7 +189,7 @@ export class Car {
     this.syncView(dt);
   }
 
-  /** True when the car is close to a point, for enter/exit prompts. */
+  /** True when the car is close to a point, for the enter/exit prompts. */
   isNear(x, z, distance = 3.4) {
     return Math.hypot(this.x - x, this.z - z) <= distance + this.dims.length * 0.18;
   }

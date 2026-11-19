@@ -62,13 +62,13 @@ export class TrafficSystem {
     this.lanes = world.plan.lanes;
     this.lanesFrom = new Map();
     for (const lane of this.lanes) {
-      // A positive offset lane runs a -> b; a negative one runs b -> a.
+      // A positive-offset lane runs a -> b; a negative one runs b -> a.
       lane.startNode = lane.offset > 0 ? lane.edge.a : lane.edge.b;
       lane.endNode = lane.offset > 0 ? lane.edge.b : lane.edge.a;
       lane.axis = lane.edge.axis;
       lane.midX = (lane.from.x + lane.to.x) / 2;
       lane.midZ = (lane.from.z + lane.to.z) / 2;
-      // Index the lanes by the junction they leave from; turning only needs the exit.
+      // Index the lanes by the junction they leave from; turning only needs the exits.
       const list = this.lanesFrom.get(lane.endNode);
       if (list) list.push(lane);
       else this.lanesFrom.set(lane.endNode, [lane]);
@@ -182,7 +182,7 @@ export class TrafficSystem {
       const along = px * lane.dirX + pz * lane.dirZ;
       const perp = Math.abs(px * lane.dirZ - pz * lane.dirX);
       if (perp > tolerance) continue;
-      // How far the point is outside this lane's actual stretch, so a lane in the same
+      // How far the point sits outside this lane's actual stretch, so a lane on the same
       // street two blocks away is not mistaken for the one under the car.
       const outside = along < 0 ? -along : along > lane.length ? along - lane.length : 0;
       if (outside > 40) continue;
@@ -196,8 +196,8 @@ export class TrafficSystem {
   }
 
   /**
-   * Puts a small platoon in the lane ahead of a point. The drive shot uses this so the frame
-   * is guaranteed to have traffic in it; it is deterministic from the seed.
+   * Puts a small platoon in the lane ahead of a point. The drive shot uses this so the
+   * frame is guaranteed to have traffic in it; it is deterministic from the seed.
    */
   placeAhead(x, z, heading, { distance = 32, count = 3, spacing = 16 } = {}) {
     const found = this.laneNear(x, z, heading);
@@ -339,7 +339,7 @@ export class TrafficSystem {
     if (node && node.signal && remaining < 18 && remaining > 0) {
       const light = this.lightFor(node, lane.axis);
       const stopAt = remaining - 5.2;
-      // An amber light is only run if the car is already too close to stop.
+      // An amber light is only run when the car is already too close to stop.
       if (light === 'red' || (light === 'amber' && stopAt > 3)) {
         if (stopAt < desired * 1.2) desired = Math.max(0, stopAt * 0.55);
       }

@@ -57,7 +57,7 @@ export class Rain {
   }
 
   update(dt, camera) {
-    // Ease towards the target so a shower starts and stops instead of popping.
+    // Ease towards the target, so a shower starts and stops instead of popping.
     this.intensity += (this.target - this.intensity) * Math.min(1, dt * 2.5);
     this.points.visible = this.intensity > 0.02;
     if (!this.points.visible || !camera) return;
@@ -69,7 +69,7 @@ export class Rain {
     for (let i = 0; i < DROPS; i += 1) {
       const index = i * 3;
       positions[index + 1] -= this.speeds[i] * dt * fall;
-      // A little slant with the wind; a drop that falls out respawns partway up the box
+      // A little slant with the wind; a drop that falls out respawns partway up the box,
       // so the shower never visibly empties from the bottom.
       positions[index] += dt * 3.2;
       if (positions[index + 1] < -4) {

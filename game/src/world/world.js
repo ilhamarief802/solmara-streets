@@ -44,8 +44,8 @@ export function createWorld(options = {}) {
   const group = new THREE.Group();
   group.name = 'solmara';
 
-  // The build order matters: collisions exist before the props that register with them, and
-  // the walk layer comes last so a kerbside space is never placed inside a lamp post.
+  // The build order matters: colliders exist before the props that register with them, and
+  // the walk layer comes last, so a kerbside space is never placed inside a lamp post.
   onStage('painting the surfaces');
   const terrain = buildTerrain(plan, textures, { detail: settings.propDensity });
   group.add(terrain.group);
@@ -146,7 +146,7 @@ export function createWorld(options = {}) {
     if (palette) {
       night = palette.night ?? 0;
       for (const material of windowMaterials) {
-        // Curtain walls read as one sheet of light, punched windows need less.
+        // Curtain walls read as one sheet of light; punched windows need less.
         const glass = material.name?.includes('glass');
         material.emissiveIntensity = night * (glass ? 1.35 : 0.9);
       }

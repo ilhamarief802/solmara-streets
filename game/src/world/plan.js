@@ -1,7 +1,7 @@
 // The city plan: block grid, road graph, coastline, channel, bridges, the elevated highway
 // ring, district zoning and the queries later systems need (nearest lane, nearest node,
-// water/land tests). Pure data plus small helpers, no meshes: every visual is built from
-// this plan by the world modules.
+// water/land tests). Pure data plus small helpers, no meshes: every visual in the world is
+// built from this plan by the other world modules.
 
 import { Random } from '../core/rng.js';
 import { districtIdAt, DISTRICT_IDS, DISTRICTS } from './districts.js';
@@ -82,7 +82,7 @@ export const HIGHWAY = {
 };
 
 // ------------------------------------------------------------------ land tests
-// Every placement pass asks these before it raises anything, so they are the cheapest
+// Every placement pass asks these before it raises anything, so they are kept the cheapest
 // possible shape: plain rectangle comparisons.
 
 export function isWaterAt(x, z) {
@@ -162,7 +162,7 @@ function laneFor(from, to, side, speed) {
   };
 }
 
-// Downtown traffic crawls, the strip is a little quicker, everywhere else flows.
+// Downtown traffic crawls, the strip is a little slower still, everywhere else flows.
 const SPEEDS = { downtown: 12.5, neon: 10, default: 15 };
 
 function makeEdge(id, a, b, axis, options = {}) {
@@ -256,7 +256,7 @@ function buildBlocks(nodes) {
       const cz = (z0 + z1) / 2;
       if (isWaterAt(cx, cz)) continue;
       const district = districtIdAt(cx, cz, false);
-      // A deterministic sprinkle of parks: no downtown, no working waterfront.
+      // A deterministic sprinkle of parks: never downtown, never the working waterfront.
       const parkable = district !== 'downtown' && district !== 'harbour' && district !== 'airstrip';
       blocks.push({
         id: `b-${i}-${j}`,
@@ -399,7 +399,7 @@ export function createCityPlan(seed = 'solmara-01') {
   const blocks = buildBlocks(nodes);
   const highway = buildHighway();
 
-  // Flatten the directed lanes into one list for traffic and navigation queries.
+  // The directed lanes are flattened into one list, for traffic and navigation queries.
   const lanes = [];
   for (const edge of edges) {
     edge.lanes.forEach((lane, index) => {

@@ -57,7 +57,7 @@ export class ChaseCar {
       const along = px * lane.dirX + pz * lane.dirZ;
       const perp = Math.abs(px * lane.dirZ - pz * lane.dirX);
       if (perp > 10 || along < -4 || along > lane.length + 4) continue;
-      // Closest to the car, and behind it counts against the lane.
+      // Closest to the car, and being behind it counts against the lane.
       const score = perp + Math.max(0, -along);
       if (score >= bestScore) continue;
       bestScore = score;
@@ -68,7 +68,7 @@ export class ChaseCar {
 
   chooseNext() {
     const end = this.lane?.endNode ?? this.lane?.edge?.b;
-    // No lane leaves this junction: fall back to any lane so the chase never freezes.
+    // No lane leaves this junction: fall back to any lane, so the chase never freezes.
     const options = (this.lanesFrom.get(end) ?? []).filter((lane) => lane !== this.lane);
     if (!options.length) return this.world.plan.lanes[this.random.int(0, this.world.plan.lanes.length - 1)];
 
@@ -81,7 +81,7 @@ export class ChaseCar {
   update(dt) {
     this.s += this.speed * dt;
     let guard = 0;
-    // A long lane can be crossed more than once in a slow frame.
+    // A long lane can be crossed more than once in one slow frame.
     while (this.lane && this.s >= this.lane.length && guard < 4) {
       guard += 1;
       this.s -= this.lane.length;

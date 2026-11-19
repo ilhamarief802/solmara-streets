@@ -1,11 +1,11 @@
-// Shot "shootout": the harbour quay at dusk, the warehouses dark behind, a pistol going off in
-// the player's hands and two officers working the same crew. The muzzle flash and tracer are
-// held for the shutter, the thugs are fixed in their poses, and the HUD carries three stars and
-// the mission card for the fight.
+// Shot "shootout": the harbour quay at dusk, the warehouses dark behind, a pistol going off
+// in the player's hands and two officers working the same crew. The muzzle flash and tracer
+// are held for the shutter, the thugs are fixed in their poses, and the HUD carries three
+// stars and the mission card for the fight.
 //
 // Everything in the frame is the game's own: thugs from combat.spawnThug, officers from
-// police.spawnCop, flash and tracer from combat.effects. The quay south of the warehouses is the
-// one stretch of open road with a clean sight line to the loading doors.
+// police.spawnCop, flash and tracer from combat.effects. The quay south of the warehouses is
+// the one stretch of open road with a clean sight line to the loading doors.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 

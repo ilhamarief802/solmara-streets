@@ -12,7 +12,7 @@ import { bus } from '../core/events.js';
 const FLEET_CAPACITY = 40;
 const STREAM_RADIUS = 200;
 const MAX_PARKED_DRAWN = 26;
-/** How far a car can be and still be worth a prompt. */
+/** How far away a car can be and still be worth a prompt. */
 const REACH = 3.8;
 
 /** The names the HUD and the menus show for each body type. */
@@ -160,7 +160,7 @@ export class VehicleSystem {
     }
     if (this.traffic) {
       const live = this.traffic.nearestCar(x, z, maxDistance);
-      // A live car wins only if it is closer than the best parked one.
+      // A live car only wins when it is closer than the best parked one.
       if (live && live.distance < bestDistance) best = { kind: 'traffic', car: live.car, distance: live.distance };
     }
     return best;
@@ -201,7 +201,7 @@ export class VehicleSystem {
     let source;
     if (found.kind === 'parked') {
       const spot = found.spot;
-      // Mark the spot taken so the fleet stops drawing a ghost at the kerb.
+      // Mark the spot taken, so the fleet stops drawing a ghost at the kerb.
       this.taken.add(spot.id);
       source = { type: spot.type, paint: spot.color, x: spot.x, z: spot.z, heading: spot.heading };
     } else {
@@ -318,8 +318,8 @@ export class VehicleSystem {
   }
 
   /**
-   * Puts the player behind the wheel of a fresh car at a spot, no key press needed. The shot
-   * rig uses this to pose the drive scenario; it is also a useful test hook.
+   * Puts the player behind the wheel of a fresh car at a spot, no key press needed. The
+   * shot rig uses this to pose the drive scenario; it is also a useful test hook.
    */
   spawnDrivenCar({ type = 'coupe', paint = 0x1f6f78, x = 0, z = 0, heading = 0, speed = 0 } = {}) {
     if (this.activeCar) this.exit(this.player);

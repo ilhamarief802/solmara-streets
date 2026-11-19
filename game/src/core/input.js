@@ -38,7 +38,7 @@ export class Input {
     this.locked = false;
     this.enabled = true;
     this.pointerSensitivity = 0.0022;
-    // Bound once so detach() can remove exactly the listeners attach() added.
+    // Bound once, so detach() can remove exactly the listeners attach() added.
     this._onKeyDown = this._handleKeyDown.bind(this);
     this._onKeyUp = this._handleKeyUp.bind(this);
     this._onMouseMove = this._handleMouseMove.bind(this);
@@ -84,13 +84,13 @@ export class Input {
 
   _handleKeyDown(event) {
     const code = event.code;
-    // Let the browser keep its own reload, devtools and tab shortcuts.
+    // The browser keeps its own reload, devtools and tab shortcuts.
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (code === 'F3' || code === 'F5' || code === 'F11' || code === 'F12') event.preventDefault();
     // A held key auto-repeats; only the first press counts as `pressed`.
     if (!this.down.has(code)) this.pressed.add(code);
     this.down.add(code);
-    // Space scrolls the page and jumps — the jump wins.
+    // Space both scrolls the page and jumps — the jump wins.
     if (code === 'Space') event.preventDefault();
     bus.emit('input:key', { code, down: true, repeat: event.repeat });
   }
@@ -158,7 +158,7 @@ export class Input {
     if (document.exitPointerLock) document.exitPointerLock();
   }
 
-  /** True while the action's key is held. */
+  /** True while the action's key is held down. */
   isDown(action) {
     if (!this.enabled) return false;
     const code = this.bindings[action];

@@ -92,7 +92,7 @@ export class PoliceSystem {
       if (list) list.push(lane);
       else this.laneStart.set(lane.startNode, [lane]);
     }
-    // Every lane gets the list of lanes that leave the junction it ends at.
+    // Every lane gets the list of lanes leaving the junction it ends at.
     for (const lane of lanes) {
       const options = this.laneStart.get(lane.endNode);
       if (options) lane.nextOptions = options;
@@ -234,7 +234,7 @@ export class PoliceSystem {
       if (ahead > 0.25 && distance < 170) continue;
       return lane;
     }
-    // No lane fitted the ring: any lane is better than no response.
+    // No lane fitted the ring: any lane is better than no response at all.
     return this.random.pick(lanes);
   }
 

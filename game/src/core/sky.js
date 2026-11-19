@@ -1,6 +1,6 @@
 // Atmosphere: the gradient sky dome, the sun and moon lights, the hemisphere fill and the
 // stars. The dome is a single shader sphere that follows the camera, so the horizon never
-// shows an edge; the stars fade in from the same palette the sky is tinted with.
+// shows an edge; the stars fade in from the same palette that tints the sky.
 
 import { Random } from './rng.js';
 import { clamp } from './math.js';
@@ -43,8 +43,8 @@ const SKY_FRAGMENT = /* glsl */ `
 `;
 
 /**
- * Builds the sky, lights and stars, and returns a small controller the main loop drives.
- * `setPalette` takes the clock palette plus the weather's multipliers.
+ * Builds the sky, the lights and the stars, and returns a small controller the main loop
+ * drives. `setPalette` takes the clock palette plus the weather's multipliers.
  */
 export function createAtmosphere(scene, { radius = 2600, starCount = 900, segments = 24 } = {}) {
   const group = new THREE.Group();
@@ -77,7 +77,7 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
   group.add(dome);
 
   // Stars: a sparse upper hemisphere. They hang off their own group so drifting them is
-  // one rotation instead of rewriting the buffer.
+  // one rotation instead of a rewrite of the buffer.
   const random = new Random('solmara-stars');
   const starPositions = new Float32Array(starCount * 3);
   const starSizes = new Float32Array(starCount);

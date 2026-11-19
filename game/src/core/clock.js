@@ -1,6 +1,6 @@
-// The city clock. It turns real seconds into Solmara minutes, names the phase of the day,
+// The city clock. It turns real seconds into Solmara minutes, names the phase of the day
 // and hands out a fully populated palette (sky, sun, ambient, fog, exposure, window glow,
-// star opacity) for the sky and world to apply. Palettes are interpolated from
+// star opacity) for the sky and the world to apply. Palettes are interpolated from
 // hand-picked keyframes and cached per simulated minute, so a frame costs a lookup.
 
 import { clamp, lerp, smoothstep, wrap } from './math.js';
@@ -101,7 +101,7 @@ function interpolateStops(hour) {
       break;
     }
   }
-  // smoothstep rather than a linear ramp: the dawn and dusk bands read as a slow change.
+  // smoothstep rather than a linear ramp: dawn and dusk then read as a slow change.
   const t = b.at === a.at ? 0 : smoothstep(0, 1, (hour - a.at) / (b.at - a.at));
   const out = {};
   for (const key of Object.keys(a)) {
@@ -134,7 +134,7 @@ export function formatHour(hour) {
 /** The direction from the city towards the sun, in three.js space. */
 export function sunDirection(hour, out = new THREE.Vector3()) {
   const wrapped = wrap(hour, 24);
-  // The sun rises at 06:00, crosses at noon and sets at 18:00; +Z keeps the light
+  // The sun rises at 06:00, crosses at noon and sets at 18:00; the +Z tilt keeps the light
   // slightly behind the downtown grid so the boulevards catch a long shadow.
   const arc = ((wrapped - 6) / 12) * Math.PI;
   const x = Math.cos(arc);
@@ -203,15 +203,15 @@ export class GameClock {
     this.timeScale = clamp(Number.isFinite(scale) ? scale : 0, 0, 60);
   }
 
-  /** A palette for the current minute, cached and shared. */
+  /** The palette for the current minute, cached and shared. */
   palette() {
     // One cache key per two simulated minutes: the interpolation is slower than that.
     const key = Math.floor(this.minutes / 2);
     if (key === this._lastKey && this._palette) return this._palette;
 
     const palette = interpolateStops(this.hour);
-    // How dark it is overall, 0 at noon and 1 at midnight — the stars and the window
-    // glow both ride on it.
+    // How dark it is overall — 0 at noon, 1 at midnight. The stars and the window glow
+    // both ride on this number.
     palette.night = clamp(
       1 - smoothstep(5.2, 7.1, this.hour) + smoothstep(19.4, 20.8, this.hour),
       0,

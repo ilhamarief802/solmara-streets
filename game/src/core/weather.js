@@ -1,7 +1,7 @@
 // Weather and wind. Solmara is coastal: most days are clear and hazy, some are overcast,
 // and the sea breeze turns through the afternoon. The weather owns a small state machine
-// that changes on its own clock, and the wind vector drives palms, flags and the water
-// shader's swell direction.
+// that changes on its own clock, and the wind vector drives the palms, the flags and the
+// water shader's swell direction.
 
 import { Random } from './rng.js';
 import { clamp, lerp, wrap } from './math.js';

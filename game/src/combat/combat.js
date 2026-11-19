@@ -1,9 +1,9 @@
 // Fighting. The player's health and armour, three weapons with real ammunition, hit
 // detection against pedestrians, mission thugs and police, a muzzle flash and tracer for
-// every shot, pooled impact particles instead of decals, and a short wasted/busted loop that
-// hands the body back at a hospital or the station. It also owns the small cast of armed
-// thugs the missions place, because they share the same damage rules as everyone else. Every
-// consequence is published on the bus so the police and the audio can react.
+// every shot, pooled impact particles instead of decals, and a short wasted/busted loop
+// that hands the body back at a hospital or the station. It also owns the small cast of
+// armed thugs the missions place, because they share the same damage rules as everyone
+// else. Every consequence is published on the bus so the police and the audio can react.
 
 import { clamp, clamp01, damp } from '../core/math.js';
 import { bus } from '../core/events.js';
@@ -15,7 +15,7 @@ const MAX_HEALTH = 100;
 const REGEN_DELAY = 9;
 const REGEN_RATE = 2.2;
 const DOWN_TIME = 3.2;
-/** A dead thug's body stays for this long so missions can count the kill. */
+/** A dead thug's body stays this long, so missions can count the kill. */
 const THUG_LIFETIME = 45;
 /** Two crimes closer together than this are reported as one. */
 const CRIME_INTERVAL = 0.45;
@@ -230,9 +230,9 @@ export class Combat {
   // ---------------------------------------------------------------- shooting
   /**
    * Aim for hitscan. The camera's centre ray finds the point under the crosshair first; the
-   * shot is then fired from the body towards that point, so the third-person boom's parallax
-   * cannot make the crosshair lie. In first person the camera is the body, so the two rays
-   * are the same.
+   * shot is then fired from the body towards that point, so the third-person boom's
+   * parallax cannot make the crosshair lie. In first person the camera is the body, so the
+   * two rays are the same.
    */
   aim(originOut = _muzzle, dirOut = _cameraDir, range = 62) {
     const camera = this.camera;
@@ -248,7 +248,7 @@ export class Combat {
       return { origin: originOut, direction: dirOut };
     }
 
-    // The camera ray's first body: the shot goes at where the crosshair actually landed.
+    // Where the camera ray lands: the shot goes at what the crosshair actually covers.
     _aim.set(
       camera.position.x + dirOut.x * 0.3,
       camera.position.y + dirOut.y * 0.3,
@@ -276,7 +276,7 @@ export class Combat {
     const test = (x, y, z, radius, kind, target) => {
       _point.set(x - origin.x, y - origin.y, z - origin.z);
       const along = _point.dot(direction);
-      // Behind the muzzle or past a closer body: not a candidate.
+      // Behind the muzzle, or past a closer body: not a candidate.
       if (along <= 0.2 || along > bestAlong) return;
       const perpSq = _point.lengthSq() - along * along;
       if (perpSq > radius * radius) return;

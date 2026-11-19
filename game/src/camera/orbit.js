@@ -1,9 +1,9 @@
 // Third-person camera rig. The mouse turns it (pointer lock), the wheel changes the boom
 // length, and the rig answers to the city: a camera that would sit inside a wall is pulled
-// in along its boom until the shot is clear, and never drops under the pavement. On foot the
-// character turns to the camera; in a car the rig settles behind the boot and damps back
-// there after the mouse has had its look. V switches to a close, first-person view that
-// keeps the same yaw and pitch.
+// in along its boom until the shot is clear, and never drops under the pavement. On foot
+// the character turns to the camera; in a car the rig settles behind the boot and damps
+// back there after the mouse has had its look. V switches to a close, first-person view
+// that keeps the same yaw and pitch.
 
 import { clamp, damp, dampAngle } from '../core/math.js';
 
@@ -32,7 +32,7 @@ function rayBox(origin, dir, box, maxT) {
     let near = (min - start) / step;
     let far = (max - start) / step;
     if (near > far) {
-      // Keep `near` as the entry side whichever way the ray points.
+      // Keep `near` as the entry side, whichever way the ray points.
       const swap = near;
       near = far;
       far = swap;
@@ -134,7 +134,7 @@ export class OrbitCamera {
     this.anchor.y = damp(this.anchor.y, focus.y, followSpeed * 0.7, step);
     this.anchor.z = damp(this.anchor.z, focus.z, followSpeed, step);
 
-    // First person only makes sense on foot: getting in a car drops back to the boom.
+    // First person only makes sense on foot: getting into a car drops back to the boom.
     this.firstPerson = this.firstPerson && !driving;
     const targetDistance = this.firstPerson ? 0 : driving ? clamp(this.zoom + 1.9, 3.4, 10) : this.zoom;
     this.distance = damp(this.distance, targetDistance, 9, step);
@@ -166,7 +166,7 @@ export class OrbitCamera {
       const length = Math.hypot(dx, dy, dz) || 1;
       const dir = { x: dx / length, y: dy / length, z: dz / length };
       let nearest = 1;
-      // Only the boxes along the boom's midpoint can be in the way.
+      // Only the boxes around the boom's midpoint can be in the way.
       for (const box of this.world.colliders.near((origin.x + px) / 2, (origin.z + pz) / 2, length * 0.6 + 1)) {
         const hit = rayBox(origin, dir, box, length);
         if (hit === null) continue;
@@ -202,7 +202,7 @@ export class OrbitCamera {
       this._target.z = pz + forward.z * 4;
     } else {
       // In a car the camera looks down the bonnet, not down the old mouse yaw: the target
-      // leads along the car's heading so the road opens up before the turn.
+      // leads along the car's heading so the road opens up before the turn does.
       const lead = car ? clamp(Math.abs(car.speed) * 0.16, 0, 5) : 0;
       const lookHeading = driving ? car.heading : yaw;
       this._target.x = this.anchor.x + Math.sin(lookHeading) * lead;
@@ -213,7 +213,7 @@ export class OrbitCamera {
     this.camera.position.set(px, py, pz);
     this.camera.lookAt(this._target.x, this._target.y, this._target.z);
 
-    // A slightly wider lens in a car and on foot in first person.
+    // A slightly wider lens in a car, and on foot in first person.
     const wantedFov = this.firstPerson ? 70 : driving ? 66 : 62;
     if (Math.abs(this.camera.fov - wantedFov) > 0.01) {
       this.camera.fov = damp(this.camera.fov, wantedFov, 6, step);

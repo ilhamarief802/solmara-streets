@@ -1,7 +1,7 @@
 // The on-foot player: a character controller for a flat city with kerbs, box walls and
-// moving cars. Velocity is built from the camera's facing, the body turns to it, and a small
-// step-up keeps him walking from the road onto the pavement without jumping. While he is in
-// a car the controller hands the body to the car and stops simulating it.
+// moving cars. Velocity is built from the camera's facing, the body turns to it, and a
+// small step-up keeps him walking from the road onto the pavement without jumping. While
+// he is in a car the controller hands the body to the car and stops simulating it.
 
 import { clamp, dampAngle } from '../core/math.js';
 import { createCharacter } from './character.js';
@@ -36,7 +36,7 @@ export class Player {
     this.distanceDriven = 0;
     this._jumpLatch = false;
     this._lastGround = 'pavement';
-    /** Set by the input bus, so a Space tap between fixed steps is still seen (0.18 s). */
+    /** Set from the input bus, so a Space tap between fixed steps is still seen (0.18 s). */
     this.jumpBuffer = 0;
     this._offKey = bus.on('input:key', (event) => {
       if (event.code === 'Space' && event.down && !event.repeat) this.jumpBuffer = 0.18;
@@ -239,7 +239,7 @@ export class Player {
     this.position.y += this.velocity.y * dt;
     const ground = this.world.walk.surfaceAt(this.position.x, this.position.z);
     this._lastGround = ground.kind;
-    // Kerb step-up and step-down: follow the surface while it is close.
+    // Kerb step-up and step-down: follow the surface while it stays close.
     if (this.grounded && Math.abs(ground.y - this.position.y) < 0.5) this.position.y = ground.y;
     if (this.position.y <= ground.y) {
       this.position.y = ground.y;
@@ -274,7 +274,7 @@ export class Player {
   followCar(dt) {
     const { car } = this;
     if (!car) {
-      // The car is gone (sold, destroyed): fall back to foot rather than riding nothing.
+      // The car is gone (sold, destroyed): fall back to foot rather than ride nothing.
       this.mode = 'foot';
       return;
     }

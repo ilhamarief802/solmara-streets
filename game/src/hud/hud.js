@@ -1,9 +1,9 @@
-// The HUD. Everything is plain DOM over the canvas except the minimap, which is a canvas of
-// its own. The layout deliberately avoids the top-left corner (the page's menu button lives
-// there in the captures): money, clock and the wanted stars sit top-right; health, armour,
-// the weapon chip and the map bottom-left; the mission card bottom-right; one centred prompt
-// and one centred crosshair. Text is set only when it changes, the money counter ticks up
-// over a few frames, and the minimap redraws at 12 Hz.
+// The HUD. Everything is plain DOM over the canvas except the minimap, which is a canvas
+// of its own. The layout deliberately avoids the top-left corner (the page's menu button
+// lives there in the captures): money, clock and the wanted stars sit top-right; health,
+// armour, the weapon chip and the map bottom-left; the mission card bottom-right; one
+// centred prompt and one centred crosshair. Text is set only when it changes, the money
+// counter ticks up over a few frames, and the minimap redraws at 12 Hz.
 //
 // `update()` takes a plain snapshot from main.js; nothing in here imports a game system.
 
@@ -106,7 +106,7 @@ export class Hud {
     this.mapWrap.append(mapCanvas);
     this.mapLabel = make('div', 'hud-map-label', this.mapWrap, '');
 
-    // The weapon chip and speed live beside the map, bottom-aligned.
+    // The weapon chip and the speed live beside the map, bottom-aligned.
     const side = make('div', 'hud-map-side', this.mapRow);
     this.weaponName = make('div', 'hud-weapon-name', side, 'FISTS');
     this.weaponAmmo = make('div', 'hud-weapon-ammo', side, '');
@@ -206,7 +206,7 @@ export class Hud {
     this.text.wanted = wanted;
     for (let index = 0; index < this.starNodes.length; index += 1) {
       this.starNodes[index].classList.toggle('is-on', index < wanted);
-      // Four stars and up, the lit stars glow hotter.
+      // At four stars and up, the lit stars glow hotter.
       this.starNodes[index].classList.toggle('is-hot', index < wanted && wanted >= 4);
     }
     this.stars.classList.toggle('is-active', wanted > 0);
@@ -290,7 +290,7 @@ export class Hud {
 
     if (this.shownMoney !== this.targetMoney) {
       const difference = this.targetMoney - this.shownMoney;
-      // Fast enough to reach a reward in a few frames, slow enough to read as a count.
+      // Fast enough to reach a reward within a few frames, slow enough to read as a count.
       const step = Math.max(1, Math.abs(difference) * Math.min(1, dt * 7));
       this.shownMoney += Math.sign(difference) * Math.min(Math.abs(difference), step);
       if (Math.abs(this.targetMoney - this.shownMoney) < 1) this.shownMoney = this.targetMoney;

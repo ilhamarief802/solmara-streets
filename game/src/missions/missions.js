@@ -13,7 +13,7 @@ import { ChaseCar } from './chasecar.js';
 const SAVE_KEY = 'solmara.save.v1';
 const START_MONEY = 750;
 
-/** Shop slot: what each purchase does. Prices are intentional — armour is the cheapest. */
+/** Shop slots: what each purchase does. Prices are intentional — armour is the cheapest. */
 const SHOP_PRICES = { armour: 250, pistolAmmo: 120, shotgunAmmo: 90, shotgun: 450, repair: 150 };
 
 export class MissionSystem {
@@ -398,7 +398,7 @@ export class MissionSystem {
       },
       { key: '4', slot: 4, label: 'Repair your car', price: SHOP_PRICES.repair },
     ];
-    // The HUD greys out rows the player cannot afford.
+    // The HUD greys out the rows the player cannot afford.
     for (const item of items) item.affordable = this.money >= item.price;
     return items;
   }
