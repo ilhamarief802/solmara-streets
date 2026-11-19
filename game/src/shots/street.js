@@ -16,7 +16,7 @@ export default {
     clock.setHour(20.1);
     weather.set('clear');
 
-    // Out of the car if a previous scenario left him in one.
+    // Out of the car if an earlier scenario left him in one.
     if (game.vehicles.activeCar) game.vehicles.exit(game.player);
     game.player.teleport(210, -702, Math.PI / 2);
     game.player.character.rest();
@@ -43,14 +43,12 @@ export default {
   },
   update(ctx, elapsed) {
     const t = easeInOutCubic(clamp01(elapsed / 9));
-    // A slow push in and a hand's width of drift to the right.
+    // A slow push in, with a hand's width of drift to the right.
     const dx = this.origin.x - this.target.x;
     const dz = this.origin.z - this.target.z;
     const shrink = 1 - t * 0.12;
-    const px = this.target.x + dx * shrink + t * 0.5;
-    const pz = this.target.z + dz * shrink;
-    const py = this.origin.y - t * 0.2;
-    ctx.camera.position.set(px, py, pz);
+
+    ctx.camera.position.set(this.target.x + dx * shrink + t * 0.5, this.origin.y - t * 0.2, this.target.z + dz * shrink);
     ctx.camera.lookAt(this.target.x, this.target.y, this.target.z);
   },
 };

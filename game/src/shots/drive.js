@@ -23,7 +23,6 @@ export default {
       heading: Math.PI,
       speed: 8.4,
     });
-    // A steady right foot for the shot; the car still obeys the world.
     car.autopilot = { throttle: 0.34, steer: 0, handbrake: false };
     this.car = car;
 
@@ -46,6 +45,7 @@ export default {
   update(ctx, elapsed) {
     const car = this.car ?? ctx.game.vehicles.activeCar;
     if (!car) return;
+
     const t = easeInOutCubic(clamp01(elapsed / 7));
     const fx = Math.sin(car.heading);
     const fz = Math.cos(car.heading);
@@ -57,6 +57,7 @@ export default {
     const look = this.from.look + (this.to.look - this.from.look) * t;
     // A small settle on the suspension, not a shake: the car is cruising.
     const bob = Math.sin(elapsed * 2.2) * 0.03;
+
     ctx.camera.position.set(
       car.x - fx * back + rx * side,
       car.y + up + bob,

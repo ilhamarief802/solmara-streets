@@ -1,7 +1,7 @@
-// The shot rig. A shot is a deterministic scenario: it sets the clock and weather,
-// poses a camera along a short keyframe path, warms up, then raises window.__SHOT_READY
-// and puts its short name in the title so a capture script knows the frame is stable.
-// With no ?shot= parameter the rig stays idle and the game boots normally.
+// The shot rig. A shot is a deterministic scenario: it sets the clock and weather, poses
+// a camera along a short keyframe path, warms up, then raises window.__SHOT_READY and puts
+// its short name in the title so a capture script knows the frame is stable. With no
+// ?shot= parameter the rig stays idle and the game boots normally.
 
 import { Random } from '../core/rng.js';
 import { easeInOutCubic, clamp01 } from '../core/math.js';
@@ -20,10 +20,10 @@ export const SHOT_NAMES = Object.keys(SHOTS);
 /** Reads ?shot=, ?seed= and ?capture=1 from a query string. */
 export function parseShotParams(search = typeof location === 'undefined' ? '' : location.search) {
   const params = new URLSearchParams(search);
-  const name = params.get('shot');
   const seedValue = params.get('seed') ?? '1';
+  // Numeric seeds stay numbers so a scenario can do arithmetic on them.
   const seed = /^-?\d+$/.test(seedValue) ? Number(seedValue) : seedValue;
-  return { name, seed, capture: params.get('capture') === '1' };
+  return { name: params.get('shot'), seed, capture: params.get('capture') === '1' };
 }
 
 export class ShotRig {
@@ -49,6 +49,7 @@ export class ShotRig {
   start(name, seed = 1, { capture = false } = {}) {
     const scenario = SHOTS[name];
     if (!scenario) return false;
+
     this.name = name;
     this.seed = seed;
     this.capture = Boolean(capture);
@@ -63,13 +64,15 @@ export class ShotRig {
     document.title = `Solmara Streets · ${name}`;
     document.body.dataset.shot = name;
     document.body.classList.toggle('is-capture', this.capture);
+
     if (this.capture) {
       // No pointer, no menu, no focus ring: the page is a viewfinder.
       document.body.style.cursor = 'none';
       document.documentElement.style.cursor = 'none';
       window.__SHOT_CAPTURE = true;
     }
-    const ctx = {
+
+    this.context = {
       game: this.game,
       seed,
       random: this.random,
@@ -80,8 +83,7 @@ export class ShotRig {
       renderer: this.game.renderer,
       rig: this,
     };
-    scenario.setup(ctx);
-    this.context = ctx;
+    scenario.setup(this.context);
     this.apply(0);
     hideBootCard();
     return true;
@@ -89,34 +91,36 @@ export class ShotRig {
 
   /** Poses the camera at a time (seconds) into the shot. */
   apply(elapsed) {
-    if (!this.active) return;
-    this.active.update(this.context, elapsed);
+    if (this.active) this.active.update(this.context, elapsed);
   }
 
   /** Called once per rendered frame. Raises __SHOT_READY when warm. */
   update() {
     if (!this.active || this.ready) return;
+
     // Wall time, not the simulation step: a slow software renderer must still reach the
     // end of the warm-up, and the camera path must not depend on the frame rate.
     this.elapsed = (performance.now() - this.startedAt) / 1000;
     this.frames += 1;
     this.apply(Math.min(this.elapsed, this.warmupSeconds + 1));
-    if (this.elapsed >= this.warmupSeconds && this.frames >= this.warmupFrames) {
-      this.apply(this.warmupSeconds + 1);
-      this.ready = true;
-      window.__SHOT_READY = true;
-      window.__SHOT_HOLD = this.capture;
-      window.__SHOT_NAME = this.name;
-      window.__SHOT_SEED = this.seed;
-      document.title = `${this.active.short ?? this.name} · Solmara`;
-      if (this.capture) {
-        // The WARM-UP is over; freeze the simulation so the frame the shutter sees is the
-        // frame every other run sees. The loop keeps rendering, so the HUD stays live.
-        this.game.loop?.setPaused?.(true);
-        this.game.input.enabled = false;
-      }
-      this.game.bus?.emit?.('shot:ready', { name: this.name, seed: this.seed });
+    if (this.elapsed < this.warmupSeconds || this.frames < this.warmupFrames) return;
+
+    // Hold the final pose and announce it.
+    this.apply(this.warmupSeconds + 1);
+    this.ready = true;
+    window.__SHOT_READY = true;
+    window.__SHOT_HOLD = this.capture;
+    window.__SHOT_NAME = this.name;
+    window.__SHOT_SEED = this.seed;
+    document.title = `${this.active.short ?? this.name} · Solmara`;
+
+    if (this.capture) {
+      // The warm-up is over: freeze the simulation so the frame the shutter sees is the
+      // frame every other run sees. The loop keeps rendering, so the HUD stays live.
+      this.game.loop?.setPaused?.(true);
+      this.game.input.enabled = false;
     }
+    this.game.bus?.emit?.('shot:ready', { name: this.name, seed: this.seed });
   }
 
   /** A plain description for the debug readout and the dossier. */
@@ -135,10 +139,11 @@ export function cameraMove(ctx, elapsed, from, to, lookFrom, lookTo, { duration 
     from.y + (to.y - from.y) * t,
     from.z + (to.z - from.z) * t,
   );
-  const lx = lookFrom.x + (lookTo.x - lookFrom.x) * t;
-  const ly = lookFrom.y + (lookTo.y - lookFrom.y) * t;
-  const lz = lookFrom.z + (lookTo.z - lookFrom.z) * t;
-  camera.lookAt(lx, ly, lz);
+  camera.lookAt(
+    lookFrom.x + (lookTo.x - lookFrom.x) * t,
+    lookFrom.y + (lookTo.y - lookFrom.y) * t,
+    lookFrom.z + (lookTo.z - lookFrom.z) * t,
+  );
   if (camera.fov !== fov) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
