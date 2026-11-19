@@ -8,6 +8,7 @@ import { Random } from '../core/rng.js';
 import { GRID, HIGHWAY, isWaterAt } from './plan.js';
 import { districtOf } from './districts.js';
 
+// Heights step up from asphalt to pavement to the kerb cap; the walk surface mirrors it.
 const ROAD_Y = 0.08;
 const SIDEWALK_Y = 0.16;
 const KERB_TOP = 0.22;

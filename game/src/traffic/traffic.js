@@ -12,6 +12,7 @@ const COUNT = 30;
 const DESPAWN = 320;
 const SPAWN_MIN = 55;
 const SPAWN_MAX = 230;
+/** Green, amber and red add up to the cycle; every car on the graph shares the phase. */
 const SIGNAL_CYCLE = 26;
 const SIGNAL_GREEN = 11;
 const SIGNAL_AMBER = 3.2;

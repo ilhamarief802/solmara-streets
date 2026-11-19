@@ -5,7 +5,7 @@
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 
-/** Where each cruiser sits behind the player's car: [distance back, lateral offset]. */
+/** Where each cruiser sits behind the player's car: [m back, m to the right]. */
 const FORMATION = [
   [7.4, -1.2],
   [15.5, 1.6],

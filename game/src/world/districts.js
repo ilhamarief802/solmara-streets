@@ -16,6 +16,7 @@ export const DISTRICTS = {
     lot: [42, 68],
     setbackChance: 0.72,
     parkChance: 0.04,
+    // Which entry of the palette's facade list a lot starts on; the walk cycles from there.
     facadeCycle: 2,
     palette: {
       facades: [0x9fb4c4, 0xc4c9c2, 0x7f93a8, 0xb9ab97],

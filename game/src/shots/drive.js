@@ -36,6 +36,8 @@ export default {
     game.player.character.rest();
     game.cameraRig.timeSinceLook = 0;
 
+    // Keyframes in car space: metres behind the nose, metres to the right, metres up, and
+    // how far ahead of the car the camera looks.
     this.from = { back: 10.4, side: 3.1, up: 3.15, look: 19 };
     this.to = { back: 9.2, side: 2.4, up: 2.7, look: 24 };
     ctx.rig.exposure = 1.25;

@@ -31,6 +31,7 @@ export function buildTerrain(plan, textures, options = {}) {
   // ---------------------------------------------------------------- land base
   // Two large pieces either side of the channel, plus the northern cap over the channel's
   // head, leaves the channel and the sea uncovered.
+  // The land rectangle, inset from the plan bounds so the sea shows at every edge.
   const north = -975;
   const south = 638;
   const west = -876;

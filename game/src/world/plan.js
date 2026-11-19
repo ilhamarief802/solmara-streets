@@ -27,6 +27,7 @@ export const WATER = {
   channelX0: -45,
   channelX1: 25,
   channelZ0: -640,
+  // A touch under the quay, so the harbour edge reads as a step rather than a seam.
   level: -0.45,
 };
 

@@ -33,6 +33,7 @@ export function createWorld(options = {}) {
   const seed = options.seed ?? 'solmara-01';
   const settings = options.settings ?? { propDensity: 1 };
   const onStage = options.onStage ?? (() => {});
+  // `lite` drops the costly facade passes; the software-rasteriser path in main.js sets it.
   const lite = Boolean(options.lite);
   const started = performance.now();
 

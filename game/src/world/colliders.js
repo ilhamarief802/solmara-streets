@@ -8,6 +8,7 @@ import { WATER } from './plan.js';
 
 const CELL = 64;
 
+/** The grid buckets by a string key; building it once per box keeps the hot query path cheap. */
 const cellKey = (cx, cz) => `${cx},${cz}`;
 
 export class ColliderWorld {

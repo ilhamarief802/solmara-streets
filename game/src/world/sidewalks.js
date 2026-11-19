@@ -13,6 +13,7 @@ export const SURFACE = {
   road: 0.09,
   ground: 0.03,
   sand: 0.03,
+  // Only the surface query returns this; nobody stands on the water.
   water: WATER.level,
 };
 

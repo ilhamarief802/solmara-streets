@@ -48,6 +48,7 @@ export default {
       game.missions.markersHidden = true;
       game.missions.silent = true;
     }
+    // A fixed HUD snapshot: the shot must not wait on the simulation's own refresh.
     game.hud?.update({
       districtName: 'Downtown Core',
       hour: clock.hour,

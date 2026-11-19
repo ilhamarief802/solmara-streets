@@ -31,7 +31,8 @@ export default {
     game.traffic.placeAhead(206, -697, Math.PI / 2, { distance: 24, count: 3, spacing: 18 });
     game.pedestrians.reset(seed, 206, -697, 34);
 
-    // Put four of the crowd on the two lit pavements, inside the frame the camera sees.
+    // Put four of the crowd on the two lit pavements, inside the frame the camera sees;
+    // they keep walking their rings once placed.
     const stage = (index, x, z, heading) => {
       const ped = game.pedestrians.peds[index];
       if (!ped) return;

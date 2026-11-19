@@ -32,6 +32,7 @@ class Soup {
     nz /= length;
     this.positions.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
     this.normals.push(nx, ny, nz, nx, ny, nz, nx, ny, nz);
+    // Per-vertex colour, so one vertexColors material can paint a whole fleet.
     this.colors.push(color.r, color.g, color.b, color.r, color.g, color.b, color.r, color.g, color.b);
     this.triangles += 1;
   }

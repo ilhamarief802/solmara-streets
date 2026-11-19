@@ -15,6 +15,7 @@ const MAX_PARKED_DRAWN = 26;
 /** How far a car can be and still be worth a prompt. */
 const REACH = 3.8;
 
+/** The names the HUD and the menus show for each body type. */
 const CAR_NAMES = {
   sedan: 'Sedan',
   coupe: 'Coupe',

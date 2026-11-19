@@ -7,6 +7,7 @@
 import { clamp, damp } from '../core/math.js';
 import { bus } from '../core/events.js';
 
+// Lateral grip per surface: asphalt holds a line, sand and water let the tail go.
 const GRIP = { road: 8.6, pavement: 7.4, lot: 6.2, sand: 2.3, ground: 3.2, water: 1.4 };
 const MAX_SPEED = { road: 27, pavement: 20, lot: 18, sand: 13.5, ground: 14, water: 6 };
 const ACCELERATION = 9.4;

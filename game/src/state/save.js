@@ -58,6 +58,7 @@ export function emptySave() {
   };
 }
 
+// Local rather than from core/math: this module stays importable on its own in a test.
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
 /** Coerces whatever was on disk into the shape above. */

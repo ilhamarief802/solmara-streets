@@ -16,7 +16,7 @@ const CREW = [
   { x: -646, z: 588, boss: true, health: 120 },
 ];
 
-/** A flash and tracer held for the whole shot: a live 60 ms flash would miss the shutter. */
+/** Seconds a flash and tracer are held: a live 0.06 s flash would miss the shutter. */
 const HELD = 120;
 
 export default {

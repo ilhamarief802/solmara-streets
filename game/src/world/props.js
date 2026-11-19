@@ -15,7 +15,10 @@ const IRON = 0x2f3437;
 /** The beach keeps its umbrellas this far from the sea. */
 const WATERLINE = 640;
 
-/** The signal cycle: green, amber, red, with a per-junction offset. */
+/**
+ * The signal cycle: green, amber, red, with a per-junction offset. These three numbers
+ * must match the ones traffic.js uses, or cars and lamps disagree at the lights.
+ */
 export class TrafficSignals {
   constructor(heads) {
     this.heads = heads;

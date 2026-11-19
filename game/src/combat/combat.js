@@ -27,6 +27,7 @@ const _right = new THREE.Vector3();
 const _up = new THREE.Vector3();
 const _point = new THREE.Vector3();
 
+// One counter for the whole module: a reused id would confuse the kill tally.
 let thugSerial = 0;
 
 export class Combat {

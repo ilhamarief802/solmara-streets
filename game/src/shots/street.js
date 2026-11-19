@@ -37,6 +37,7 @@ export default {
     // cool ambient fill is the shot's key light; it only exists in this scenario.
     this.fill = new THREE.AmbientLight(0x9fb0cc, 2.2);
     game.scene.add(this.fill);
+    // With the fill doing the work, the exposure can come up without blowing the signs.
     ctx.rig.exposure = 1.5;
     ctx.camera.fov = 58;
     ctx.camera.updateProjectionMatrix();

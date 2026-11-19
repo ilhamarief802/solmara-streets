@@ -24,7 +24,8 @@ export default {
     game.pedestrians.reset(seed, -358, 84, 30);
     game.pedestrians.placeAround(-360, 78, 5, 40);
 
-    // Two of them on the pavement in the sight line to the market, so the walk is alive.
+    // Two of them on the pavement in the sight line to the market, so the walk is alive:
+    // only their pose is scripted, the walk itself stays live.
     const stage = (index, x, z) => {
       const ped = game.pedestrians.peds[index];
       if (!ped) return;

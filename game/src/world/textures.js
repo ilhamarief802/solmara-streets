@@ -10,6 +10,7 @@
 import { Random } from '../core/rng.js';
 import { districtOf } from './districts.js';
 
+// Blade signs are painted short: the longest word here still fits a two-metre board.
 const NEON_WORDS = ['SOLMARA', 'NEON', 'CLUB LUNA', 'MOTEL', 'PIER 9', 'VERANO', 'TIDES', '24 HOURS', 'PALMAS', 'RADIO'];
 
 function createCanvas(width, height) {

@@ -37,6 +37,7 @@ function uvPair(value) {
 export class MeshBuilder {
   constructor(name = 'builder') {
     this.name = name;
+    // Plain arrays while the shape is being assembled; build() converts them once.
     this.positions = [];
     this.normals = [];
     this.uvs = [];

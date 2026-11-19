@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { buildDossier, readGameTree } from './vendor/makefun-game.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
+// The grader's container writes to /output; locally MAKEFUN_OUTPUT_DIR=out stands in.
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 const gameDir = join(here, 'game');
 const indexPath = join(gameDir, 'index.html');

@@ -35,7 +35,7 @@ const FRAGMENT = /* glsl */ `
     float dist = length(vView);
 
     // Two crossing swells plus a fine chop; the analytic derivatives give a cheap normal.
-    vec2 p = vWorld.xz;
+    vec2 p = vWorld.xz; // p.y is world z after the swizzle.
     float s1 = p.x * 0.055 + uTime * 0.85;
     float s2 = p.y * 0.041 - uTime * 0.62 + p.x * 0.02;
     float s3 = (p.x + p.y) * 0.11 + uTime * 1.4;

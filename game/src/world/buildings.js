@@ -14,6 +14,7 @@ import { clamp, lerp } from '../core/math.js';
 // Towers cluster around the downtown core and thin out towards the edges of the map.
 const CORE = { x: 250, z: -220 };
 
+// Roof clutter reads as one silhouette from the street, so the cap colours stay close.
 const ROOF_TOP = { plain: 0x5d6063, crown: 0x62666a, shoulder: 0x4b4f53, tank: 0x8a7a63, mast: 0xb8bcc0 };
 
 /** Splits a rectangle into a jittered grid of lots. */

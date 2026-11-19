@@ -13,6 +13,7 @@ function blockById(plan, id) {
   return plan.blocks.find((block) => block.id === id) ?? null;
 }
 
+// Signs are the one landmark part that is not merged: each billboard keeps its own texture.
 function addSignMesh(group, texture, x, y, z, width, height, rotY, doubleSided = true) {
   const material = new THREE.MeshBasicMaterial({
     map: texture,
