@@ -9,6 +9,7 @@
 
 const SAVE_KEY = 'solmara.save.v2';
 const LEGACY_KEY = 'solmara.save.v1';
+const CURRENT_VERSION = 2;
 
 /** localStorage can throw (private mode, disabled storage). Every call is guarded. */
 function storage() {
@@ -46,7 +47,7 @@ function writeJson(key, value) {
 /** The shape every reader can rely on, with sane defaults for a fresh player. */
 export function emptySave() {
   return {
-    version: 2,
+    version: CURRENT_VERSION,
     money: 750,
     completed: [],
     settings: null,
@@ -57,12 +58,16 @@ export function emptySave() {
   };
 }
 
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+/** Coerces whatever was on disk into the shape above. */
 function normalise(payload) {
   const save = { ...emptySave(), ...(payload ?? {}) };
   save.money = Math.max(0, Math.round(Number(save.money) || 0));
   save.completed = Array.isArray(save.completed) ? save.completed.filter((id) => typeof id === 'string') : [];
-  save.health = Math.max(0, Math.min(100, Number(save.health) || 100));
-  save.armour = Math.max(0, Math.min(100, Number(save.armour) || 0));
+  // `|| 100` keeps a corrupt or zero health from restoring a dead player.
+  save.health = clamp(Number(save.health) || 100, 0, 100);
+  save.armour = clamp(Number(save.armour) || 0, 0, 100);
   if (save.settings && typeof save.settings !== 'object') save.settings = null;
   if (save.position && !Number.isFinite(Number(save.position.x))) save.position = null;
   return save;
@@ -72,8 +77,10 @@ function normalise(payload) {
 export function loadSave() {
   const fresh = readJson(SAVE_KEY);
   if (fresh) return normalise(fresh);
+
   const legacy = readJson(LEGACY_KEY);
   if (!legacy) return null;
+  // The v1 record only carried the wallet, the story and the vitals.
   return normalise({
     money: legacy.money,
     completed: legacy.completed,
@@ -157,13 +164,11 @@ export function applySettings(save, settings) {
   return settings.apply(values);
 }
 
-/**
- * Restores the player and story from a save. The menu calls this from Continue; Play
- * calls it with reset=true first, so both paths go through one place.
- */
+/** Restores the player, the story and (when the save had one) the car they sat in. */
 export function restoreGame(save, game) {
   if (!save) return false;
   const { missions, combat, player, vehicles } = game;
+
   if (missions) {
     missions.money = Math.max(0, Math.round(save.money ?? 750));
     missions.completed = [...(save.completed ?? [])];
@@ -174,29 +179,32 @@ export function restoreGame(save, game) {
     combat.downKind = null;
     combat.downTimer = 0;
   }
-  const position = save.position;
-  if (player && position) {
-    player.teleport(position.x, position.z, position.heading ?? 0);
-    player.character?.rest();
-    if (game.cameraRig) {
-      game.cameraRig.anchor.x = position.x;
-      game.cameraRig.anchor.y = player.position.y + 1.45;
-      game.cameraRig.anchor.z = position.z;
-      game.cameraRig.yaw = position.heading ?? 0;
-      game.cameraRig.timeSinceLook = 0;
-    }
-    if (position.car && vehicles?.spawnDrivenCar) {
-      const spot = vehicles.world.placeOnGround
-        ? vehicles.world.placeOnGround(position.car.x, position.car.z)
-        : { x: position.car.x, z: position.car.z };
-      vehicles.spawnDrivenCar({
-        type: position.car.type,
-        paint: position.car.paint,
-        x: spot.x,
-        z: spot.z,
-        heading: position.car.heading ?? 0,
-      });
-    }
+
+  const { position } = save;
+  if (!player || !position) return true;
+
+  player.teleport(position.x, position.z, position.heading ?? 0);
+  player.character?.rest();
+  if (game.cameraRig) {
+    game.cameraRig.anchor.x = position.x;
+    game.cameraRig.anchor.y = player.position.y + 1.45;
+    game.cameraRig.anchor.z = position.z;
+    game.cameraRig.yaw = position.heading ?? 0;
+    game.cameraRig.timeSinceLook = 0;
+  }
+
+  if (position.car && vehicles?.spawnDrivenCar) {
+    // Resolve the spot against the world: a save made against a wall still restores.
+    const spot = vehicles.world.placeOnGround
+      ? vehicles.world.placeOnGround(position.car.x, position.car.z)
+      : { x: position.car.x, z: position.car.z };
+    vehicles.spawnDrivenCar({
+      type: position.car.type,
+      paint: position.car.paint,
+      x: spot.x,
+      z: spot.z,
+      heading: position.car.heading ?? 0,
+    });
   }
   return true;
 }
