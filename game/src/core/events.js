@@ -18,6 +18,7 @@ export class EventBus {
     return () => this.off(type, handler);
   }
 
+  /** Subscribes for a single delivery; returns an unsubscribe function. */
   once(type, handler) {
     const off = this.on(type, (payload) => {
       off();
@@ -49,6 +50,7 @@ export class EventBus {
     }
   }
 
+  /** How many listeners a type currently has. */
   count(type) {
     return this.listeners.get(type)?.length ?? 0;
   }

@@ -1,7 +1,7 @@
-// The city clock. It turns real seconds into Solmara minutes, names the phase of the
-// day, and hands out a fully populated palette (sky, sun, ambient, fog, exposure,
-// window glow, star opacity) for the sky and world to apply. Palettes are interpolated
-// from hand-picked keyframes and cached per simulated minute, so a frame costs a lookup.
+// The city clock. It turns real seconds into Solmara minutes, names the phase of the day,
+// and hands out a fully populated palette (sky, sun, ambient, fog, exposure, window glow,
+// star opacity) for the sky and world to apply. Palettes are interpolated from
+// hand-picked keyframes and cached per simulated minute, so a frame costs a lookup.
 
 import { clamp, lerp, smoothstep, wrap } from './math.js';
 
@@ -101,6 +101,7 @@ function interpolateStops(hour) {
       break;
     }
   }
+  // smoothstep rather than a linear ramp: the dawn and dusk bands read as a slow change.
   const t = b.at === a.at ? 0 : smoothstep(0, 1, (hour - a.at) / (b.at - a.at));
   const out = {};
   for (const key of Object.keys(a)) {
@@ -204,7 +205,7 @@ export class GameClock {
 
   /** A palette for the current minute, cached and shared. */
   palette() {
-    // Two simulated minutes per cache key: the interpolation is slower than that.
+    // One cache key per two simulated minutes: the interpolation is slower than that.
     const key = Math.floor(this.minutes / 2);
     if (key === this._lastKey && this._palette) return this._palette;
 

@@ -1,6 +1,6 @@
-// Deterministic randomness. Every district, block, window and palm in Solmara comes
-// out of these streams, so the same seed always produces the same city. Nothing here
-// touches Math.random: a shot has to be reproducible frame for frame.
+// Deterministic randomness. Every district, block, window and palm in Solmara comes out
+// of these streams, so the same seed always produces the same city. Nothing here touches
+// Math.random: a shot has to be reproducible frame for frame.
 
 /** Turns a short label into a 32-bit seed, FNV-1a style. */
 export function hashLabel(label) {
@@ -106,5 +106,6 @@ export function weightedPick(random, entries) {
     roll -= Math.max(0, entry.weight ?? 1);
     if (roll <= 0) return entry;
   }
+  // Only reachable through floating-point drift at the very end of the range.
   return entries[entries.length - 1];
 }

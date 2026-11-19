@@ -131,6 +131,7 @@ export function sampleStops(stops, at, keys = null) {
     const bv = b[key];
     if (typeof av === 'number') out[key] = lerp(av, bv, t);
     else if (Array.isArray(av)) out[key] = av.map((value, i) => lerp(value, bv[i], t));
+    // Flags and labels switch at the midpoint rather than interpolating.
     else out[key] = t < 0.5 ? av : bv;
   }
   return out;
