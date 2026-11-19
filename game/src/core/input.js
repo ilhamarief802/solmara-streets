@@ -142,6 +142,7 @@ export class Input {
     // A tab switch releases every key; without this the player would keep running.
     this.down.clear();
     this.pressed.clear();
+    this.released.clear();
   }
 
   requestLock() {

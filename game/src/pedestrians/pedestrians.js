@@ -11,6 +11,7 @@ import { clamp, dampAngle } from '../core/math.js';
 import { isWaterAt } from '../world/plan.js';
 
 const COUNT = 32;
+/** The meshes are allocated once for the largest crowd the settings can ask for. */
 const CAPACITY = 48;
 const CROSS_SPEED = 1.7;
 const FLEE_SPEED = 5.2;

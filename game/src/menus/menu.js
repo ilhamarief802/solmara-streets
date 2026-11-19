@@ -341,7 +341,10 @@ export class MenuUI {
     document.body.dataset.menu = name;
     this.root.classList.toggle('is-start', name === 'start');
     const first = this.screens[name].querySelector('button:not([disabled])');
-    if (first) setTimeout(() => first.focus({ preventScroll: true }), 30);
+    // Focus only if this screen is still the one on show when the timer fires.
+    if (first) setTimeout(() => {
+      if (this.screen === name) first.focus({ preventScroll: true });
+    }, 30);
   }
 
   hide() {

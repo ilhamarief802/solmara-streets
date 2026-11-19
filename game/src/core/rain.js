@@ -68,7 +68,8 @@ export class Rain {
     for (let i = 0; i < DROPS; i += 1) {
       const index = i * 3;
       positions[index + 1] -= this.speeds[i] * dt * fall;
-      // A little slant with the wind, then wrap back to the top of the box.
+      // A little slant with the wind; a drop that falls out respawns partway up the box
+      // so the shower never visibly empties from the bottom.
       positions[index] += dt * 3.2;
       if (positions[index + 1] < -4) {
         positions[index] = (random() - 0.5) * BOX.x;

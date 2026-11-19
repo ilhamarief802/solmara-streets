@@ -116,6 +116,7 @@ export function fbm2D(x, z, octaves = 3, seed = 0) {
  * Used by the clock palette and the shot camera paths.
  */
 export function sampleStops(stops, at, keys = null) {
+  if (!stops.length) throw new Error('sampleStops called with no stops');
   if (at <= stops[0].at) return stops[0];
   if (at >= stops[stops.length - 1].at) return stops[stops.length - 1];
   let index = 0;

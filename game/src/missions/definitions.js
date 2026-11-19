@@ -7,6 +7,7 @@
 //   goto        reach `marker` within `radius` (optionally by car)
 //   chase       catch the car spawned at `spawn` (radius metres between bumpers)
 //   killAll     clear every thug spawned from `spawns` with this step's tag
+//               (each spawn may carry `heading` and `color`)
 //   checkpoints pass `points` in order, against one clock
 //   escape      be clean (wanted 0) after the heat this step stirs up
 //

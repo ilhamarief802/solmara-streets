@@ -199,7 +199,7 @@ export class GameClock {
   }
 
   setTimeScale(scale) {
-    this.timeScale = clamp(scale, 0, 60);
+    this.timeScale = clamp(Number.isFinite(scale) ? scale : 0, 0, 60);
   }
 
   /** A palette for the current minute, cached and shared. */

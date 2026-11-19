@@ -30,6 +30,8 @@ export class GameLoop {
   start() {
     if (this.running) return;
     this.running = true;
+    // Start from a clean slate so a stopped-and-restarted loop cannot catch up.
+    this.accumulator = 0;
     this._last = performance.now();
     this._raf = requestAnimationFrame(this._tick);
   }

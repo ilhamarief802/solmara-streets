@@ -161,9 +161,10 @@ export class Minimap {
       x: (wx - bounds.minX) * scale - sx,
       y: (wz - bounds.minZ) * scale - sz,
     });
+    const screenScale = size / sourceSize;
     const toScreen = (wx, wz) => {
       const point = toSource(wx, wz);
-      return { x: point.x * (size / sourceSize), y: point.y * (size / sourceSize) };
+      return { x: point.x * screenScale, y: point.y * screenScale };
     };
 
     ctx.clearRect(0, 0, size, size);

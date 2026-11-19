@@ -36,7 +36,7 @@ export class Player {
     this.distanceDriven = 0;
     this._jumpLatch = false;
     this._lastGround = 'pavement';
-    /** Set by the input bus, so a key tap between fixed steps is still seen. */
+    /** Set by the input bus, so a Space tap between fixed steps is still seen (0.18 s). */
     this.jumpBuffer = 0;
     this._offKey = bus.on('input:key', (event) => {
       if (event.code === 'Space' && event.down && !event.repeat) this.jumpBuffer = 0.18;

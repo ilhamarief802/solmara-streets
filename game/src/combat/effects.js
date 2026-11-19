@@ -130,7 +130,12 @@ export class CombatEffects {
 
   /** A free slot, or the one closest to expiring when the pool is full. */
   static take(pool) {
-    return pool.find((entry) => entry.life <= 0) ?? pool.reduce((best, entry) => (entry.life < best.life ? entry : best), pool[0]);
+    let oldest = pool[0];
+    for (const entry of pool) {
+      if (entry.life <= 0) return entry;
+      if (entry.life < oldest.life) oldest = entry;
+    }
+    return oldest;
   }
 
   /** A muzzle flash at a point, billboarded every frame. `life` is seconds. */

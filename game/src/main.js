@@ -54,6 +54,7 @@ const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / win
 camera.rotation.order = 'YXZ';
 renderer.userData.camera = camera;
 
+// Noon fog until the first palette arrives; the clock drives it from the second frame on.
 scene.fog = new THREE.FogExp2(0xc4d2dc, 0.00065);
 
 const clock = new GameClock({ startHour: 17.1 });

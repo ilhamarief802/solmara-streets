@@ -38,7 +38,7 @@ export function installErrorOverlay(doc = document) {
   };
 }
 
-/** A compact frame readout: fps, frame time, draw calls, triangles. */
+/** A compact frame readout: fps, average and peak frame time, draw calls, triangles, memory. */
 export class PerfOverlay {
   constructor(element = document.getElementById('perf'), renderer = null) {
     this.el = element;

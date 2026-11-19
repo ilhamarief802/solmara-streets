@@ -107,11 +107,13 @@ export class MissionSystem {
       // Sit the marker on the middle of the survivors, so it tracks the fight.
       const alive = (this.combat?.thugs ?? []).filter((thug) => !thug.dead && thug.tag === this.stepTag);
       if (!alive.length) return { ...step.spawns[0] };
-      const count = alive.length;
-      return {
-        x: alive.reduce((sum, thug) => sum + thug.x, 0) / count,
-        z: alive.reduce((sum, thug) => sum + thug.z, 0) / count,
-      };
+      let sx = 0;
+      let sz = 0;
+      for (const thug of alive) {
+        sx += thug.x;
+        sz += thug.z;
+      }
+      return { x: sx / alive.length, z: sz / alive.length };
     }
     if (step.type === 'checkpoints') {
       return step.points[Math.min(this.checkpointIndex, step.points.length - 1)];

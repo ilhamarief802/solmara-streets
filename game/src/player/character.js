@@ -20,6 +20,8 @@ const PALETTE = {
 
 const HIP_HEIGHT = 0.94;
 
+// One material per colour, shared by every box that wears it: the rig costs a few draws,
+// not one material per limb.
 const materials = new Map();
 
 /**

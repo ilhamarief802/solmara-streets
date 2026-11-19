@@ -31,6 +31,8 @@ const CALM_DISTANCE = 62;
 const DECAY_TIME = 6;
 /** Witness ranges, per kind of witness. */
 const WITNESS = { cop: 62, cruiser: 80, ped: 42 };
+/** Sentinel for "this has not happened yet" in the crime clocks. */
+const NEVER = -99;
 
 export class PoliceSystem {
   constructor({ world, scene, player, vehicles = null, traffic = null, pedestrians = null, combat = null, cameraRig = null, hud = null, seed = 1 }) {
@@ -45,9 +47,9 @@ export class PoliceSystem {
     this.hud = hud;
     this.random = new Random(`${seed}:police`);
     this.wanted = 0;
-    this.lastCrimeAt = -99;
-    this.lastRaiseAt = -99;
-    this.lastRunover = -99;
+    this.lastCrimeAt = NEVER;
+    this.lastRaiseAt = NEVER;
+    this.lastRunover = NEVER;
     this.calm = 0;
     this.spawnClock = 1.2;
     this.blockClock = 14;

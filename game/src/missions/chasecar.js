@@ -66,6 +66,7 @@ export class ChaseCar {
 
   chooseNext() {
     const end = this.lane?.endNode ?? this.lane?.edge?.b;
+    // No lane leaves this junction: fall back to any lane so the chase never freezes.
     const options = (this.lanesFrom.get(end) ?? []).filter((lane) => lane !== this.lane);
     if (!options.length) return this.world.plan.lanes[this.random.int(0, this.world.plan.lanes.length - 1)];
 

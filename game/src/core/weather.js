@@ -80,6 +80,7 @@ export class Weather {
 
   /** Switches immediately, with no fade. Shots use this before their warm-up. */
   set(typeId) {
+    // An unknown id falls back to clear rather than leaving the weather undefined.
     const type = WEATHER_TYPES[typeId] ?? WEATHER_TYPES.clear;
     this.current = type;
     this.target = type;

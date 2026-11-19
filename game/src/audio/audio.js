@@ -353,13 +353,14 @@ export class GameAudio {
       const bassNote = mood.root - 12 + mood.bass[this.beat % mood.bass.length] + shift;
       this.musicTone({ freq: midiToHz(bassNote), at, duration: beatSeconds * 0.9, peak: 0.11, type: 'triangle' });
 
-      if (this.beat % 4 === 0) {
+      const onBar = this.beat % 4 === 0;
+      if (onBar) {
         for (const interval of mood.chord) {
           this.musicTone({ freq: midiToHz(mood.root + interval + shift), at, duration: beatSeconds * 3.6, peak: 0.035, type: mood.wave });
         }
       }
 
-      if (this.beat % 8 === 0) {
+      if (onBar && this.beat % 8 === 0) {
         this.musicTone({
           freq: midiToHz(mood.root + 12 + mood.chord[this.chordStep % mood.chord.length]),
           at,

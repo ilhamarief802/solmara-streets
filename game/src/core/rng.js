@@ -98,6 +98,7 @@ export class Random {
 
 /** Picks from [{ weight, ...anything }] by weight. */
 export function weightedPick(random, entries) {
+  if (!entries.length) throw new Error('weightedPick called with an empty list');
   let total = 0;
   for (const entry of entries) total += Math.max(0, entry.weight ?? 1);
   let roll = random.float() * total;

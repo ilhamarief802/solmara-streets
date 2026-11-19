@@ -3,6 +3,7 @@
 // Nothing here touches the scene or the DOM.
 
 export const WEAPONS = {
+  // Fists carry an infinite clip and reserve, so the reload path never applies to them.
   fists: {
     id: 'fists',
     name: 'Fists',

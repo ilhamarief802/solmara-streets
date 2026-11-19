@@ -78,10 +78,12 @@ export function setExposure(renderer, exposure) {
 /** Renderer.info in the shape the perf overlay and the smoke test print. */
 export function drawnTriangles(renderer) {
   const info = renderer.info;
+  const render = info?.render ?? {};
+  const memory = info?.memory ?? {};
   return {
-    calls: info.render.calls,
-    triangles: info.render.triangles,
-    geometries: info.memory.geometries,
-    textures: info.memory.textures,
+    calls: render.calls,
+    triangles: render.triangles,
+    geometries: memory.geometries,
+    textures: memory.textures,
   };
 }

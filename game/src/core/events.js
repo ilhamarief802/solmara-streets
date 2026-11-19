@@ -38,7 +38,7 @@ export class EventBus {
   emit(type, payload) {
     this.emitted += 1;
     const list = this.listeners.get(type);
-    if (!list) return;
+    if (!list || !list.length) return;
     // Iterate a copy: a listener is allowed to unsubscribe itself mid-emit.
     for (const handler of list.slice()) {
       try {

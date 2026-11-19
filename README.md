@@ -13,6 +13,9 @@ node serve.ts          # http://localhost:8080
 mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 ```
 
+The world layer also builds headlessly: `node tools/smoke.mjs` stubs three.js, imports the
+real modules and checks the plan, districts, colliders and shot rig without a browser.
+
 ## Play
 
 The title screen sits over the paused city: **Play** starts fresh, **Continue** restores the

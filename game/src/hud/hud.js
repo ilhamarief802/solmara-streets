@@ -32,6 +32,12 @@ function clockText(seconds) {
   return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
 }
 
+/** A 24-hour wall clock from a fractional hour, for the top-right readout. */
+function wallClock(hour) {
+  const minutes = Math.floor((hour ?? 0) * 60);
+  return `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+}
+
 export class Hud {
   constructor(root = document.getElementById('hud-root'), world = null) {
     this.root = root;
@@ -168,8 +174,7 @@ export class Hud {
   update(info = {}) {
     if (!this.root) return;
 
-    const minutes = Math.floor((info.hour ?? 0) * 60);
-    this.set('clock', `${String(Math.floor(minutes / 60) % 24).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`);
+    this.set('clock', wallClock(info.hour));
     this.set('district', info.districtName ?? 'Solmara');
     this.set('mapLabel', info.districtName ?? 'Solmara');
 

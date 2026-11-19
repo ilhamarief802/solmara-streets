@@ -137,12 +137,13 @@ export class OrbitCamera {
     const { yaw, pitch } = this;
     const cosPitch = Math.cos(pitch);
     const forward = { x: Math.sin(yaw) * cosPitch, y: -Math.sin(pitch), z: Math.cos(yaw) * cosPitch };
-    const up = driving ? 0.5 : 0.32;
+    // A little lift keeps the boom above the shoulder line without changing its length.
+    const lift = driving ? 0.5 : 0.32;
     const shoulder = this.firstPerson || driving ? 0 : SHOULDER;
     const right = { x: Math.cos(yaw), z: -Math.sin(yaw) };
 
     let px = this.anchor.x - forward.x * this.distance + right.x * shoulder;
-    let py = this.anchor.y - forward.y * this.distance + up;
+    let py = this.anchor.y - forward.y * this.distance + lift;
     let pz = this.anchor.z - forward.z * this.distance + right.z * shoulder;
 
     if (this.firstPerson) {

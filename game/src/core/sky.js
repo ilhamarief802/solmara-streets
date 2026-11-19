@@ -68,10 +68,9 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
     depthWrite: false,
     fog: false,
   });
-  const dome = new THREE.Mesh(
-    new THREE.SphereGeometry(radius, segments, Math.max(10, Math.round(segments * 0.55))),
-    domeMaterial,
-  );
+  // Fewer rings than segments: the dome only has to carry a vertical gradient.
+  const rings = Math.max(10, Math.round(segments * 0.55));
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(radius, segments, rings), domeMaterial);
   dome.name = 'sky-dome';
   dome.frustumCulled = false;
   dome.renderOrder = -100;

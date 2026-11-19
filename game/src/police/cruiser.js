@@ -38,6 +38,7 @@ export class PursuitCruiser {
   }
 
   laneEnd(lane) {
+    // The lane's far mouth, the waypoint the cruiser steers at until it retargets.
     return { x: lane.from.x + lane.dirX * lane.length, z: lane.from.z + lane.dirZ * lane.length };
   }
 

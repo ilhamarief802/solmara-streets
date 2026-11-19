@@ -15,6 +15,7 @@ import mission from './mission.js';
 import shootout from './shootout.js';
 
 export const SHOTS = { cover, night, drive, street, chase, mission, shootout };
+/** Every registered shot name, in registry order, for the menus and the capture tools. */
 export const SHOT_NAMES = Object.keys(SHOTS);
 
 /** Reads ?shot=, ?seed= and ?capture=1 from a query string. */

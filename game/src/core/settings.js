@@ -19,8 +19,8 @@ const DRAW_DISTANCE = { min: 1200, max: 4500 };
 export class Settings {
   constructor(search = '') {
     const params = new URLSearchParams(search);
-    const requested = (params.get('quality') ?? 'medium').toLowerCase();
-    this.quality = QUALITY_PRESETS[requested] ? requested : 'medium';
+    const requestedQuality = (params.get('quality') ?? 'medium').toLowerCase();
+    this.quality = QUALITY_PRESETS[requestedQuality] ? requestedQuality : 'medium';
     const preset = QUALITY_PRESETS[this.quality];
 
     this.pixelRatioCap = preset.pixelRatio;
