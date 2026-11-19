@@ -55,15 +55,19 @@ export class GameLoop {
 
   _tick(now) {
     if (!this.running) return;
+    // Schedule first: a throw in a callback must not stop the next frame from arriving.
     this._raf = requestAnimationFrame(this._tick);
     const raw = (now - this._last) / 1000;
     this._last = now;
+    // A backgrounded tab reports a huge gap; clamping keeps the sim from jumping. The lower
+    // bound keeps a duplicate timestamp (two rAFs in the same millisecond) from freezing it.
     const frameSeconds = clamp(raw, 0.0005, this.maxFrameSeconds);
     this.frameMs = frameSeconds * 1000;
     this._smoothedMs += (this.frameMs - this._smoothedMs) * 0.08;
     this.fps = 1000 / Math.max(1e-3, this._smoothedMs);
     this.frames += 1;
 
+    // Render is unconditional: a paused world still draws, so the menus sit over live city.
     if (!this.paused) this._simulate(frameSeconds);
     if (this.onRender) this.onRender(frameSeconds, this.time);
 

@@ -1,7 +1,7 @@
-// Settings read once from the URL, then owned by the settings screen. The defaults are
-// the safe ones: no shadow maps, no post processing, a capped pixel ratio, thirty cars
-// and thirty-two people. Nothing here is required for the game to run, but the shot rig,
-// the menus and the save file all read and write the same object.
+// Settings read once from the URL, then owned by the settings screen. The defaults are the
+// safe ones: no shadow maps, no post processing, a capped pixel ratio, thirty cars and
+// thirty-two people. Nothing here is required for the game to run, but the shot rig, the
+// menus and the save file all read and write the same object.
 
 import { clamp } from './math.js';
 
@@ -20,6 +20,7 @@ export class Settings {
   constructor(search = '') {
     const params = new URLSearchParams(search);
     const requestedQuality = (params.get('quality') ?? 'medium').toLowerCase();
+    // An unknown preset name falls back to medium rather than leaving the preset undefined.
     this.quality = QUALITY_PRESETS[requestedQuality] ? requestedQuality : 'medium';
     const preset = QUALITY_PRESETS[this.quality];
 

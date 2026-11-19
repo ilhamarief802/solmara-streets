@@ -1,6 +1,6 @@
 // Visible failure and cheap instrumentation. The error overlay is installed before any
-// other module does work, so a bad import or a throw during world generation is shown
-// on screen instead of leaving a black canvas. The perf overlay is the F3 readout.
+// other module does work, so a bad import or a throw during world generation is shown on
+// screen instead of leaving a black canvas. The perf overlay is the F3 readout.
 
 import { bus } from './events.js';
 

@@ -1,7 +1,7 @@
-// Weather and wind. Solmara is coastal: most days are clear and hazy, some are
-// overcast, and the sea breeze turns through the afternoon. The weather owns a small
-// state machine that changes on its own clock, and the wind vector drives palms, flags
-// and the water shader's swell direction.
+// Weather and wind. Solmara is coastal: most days are clear and hazy, some are overcast,
+// and the sea breeze turns through the afternoon. The weather owns a small state machine
+// that changes on its own clock, and the wind vector drives palms, flags and the water
+// shader's swell direction.
 
 import { Random } from './rng.js';
 import { clamp, lerp, wrap } from './math.js';
@@ -99,6 +99,7 @@ export class Weather {
     this.elapsed += dt;
     this.nextChange -= dt;
     if (this.nextChange <= 0 && this.blend >= 1) {
+      // Never pick the type already showing: a no-op transition would read as a flicker.
       const options = ORDER.filter((id) => id !== this.current.id);
       this.target = WEATHER_TYPES[this.random.pick(options)];
       this.transitionTime = 0;
@@ -127,6 +128,7 @@ export class Weather {
     this.wind.z = Math.sin(this.windAngle) * this.wind.speed;
   }
 
+  /** Blends the derived multipliers from `current` towards `target` by `blend`. */
   _apply() {
     const t = this.blend;
     const a = this.current;

@@ -1,6 +1,6 @@
-// Atmosphere: the gradient sky dome, the sun and moon lights, the hemisphere fill and
-// the stars. The dome is a single shader sphere that follows the camera, so the horizon
-// never shows an edge; the stars fade in from the same palette the sky is tinted with.
+// Atmosphere: the gradient sky dome, the sun and moon lights, the hemisphere fill and the
+// stars. The dome is a single shader sphere that follows the camera, so the horizon never
+// shows an edge; the stars fade in from the same palette the sky is tinted with.
 
 import { Random } from './rng.js';
 import { clamp } from './math.js';
@@ -83,6 +83,7 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
   const starSizes = new Float32Array(starCount);
   for (let i = 0; i < starCount; i += 1) {
     const azimuth = random.range(0, Math.PI * 2);
+    // asin of a uniform height keeps the stars evenly spread over the dome's area.
     const elevation = Math.asin(random.range(0.06, 0.98));
     const r = radius * 0.94;
     const cosElevation = Math.cos(elevation);
@@ -162,6 +163,7 @@ export function createAtmosphere(scene, { radius = 2600, starCount = 900, segmen
     stars.visible = starMaterial.opacity > 0.01;
   }
 
+  /** Keeps the dome and the stars centred on the camera; drifts the star field slowly. */
   function update(dt, camera) {
     dome.position.copy(camera.position);
     starSpin.position.copy(camera.position);

@@ -1,6 +1,6 @@
-// Keyboard and mouse with pointer lock. The player, the camera and the menus all read
-// the same action map; every binding is remappable and every query is a no-op while
-// input is disabled (the title screen keeps the world frozen that way).
+// Keyboard and mouse with pointer lock. The player, the camera and the menus all read the
+// same action map; every binding is remappable and every query is a no-op while input is
+// disabled (the title screen keeps the world frozen that way).
 
 import { bus } from './events.js';
 
@@ -87,6 +87,7 @@ export class Input {
     // Let the browser keep its own reload, devtools and tab shortcuts.
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (code === 'F3' || code === 'F5' || code === 'F11' || code === 'F12') event.preventDefault();
+    // A held key auto-repeats; only the first press counts as `pressed`.
     if (!this.down.has(code)) this.pressed.add(code);
     this.down.add(code);
     // Space scrolls the page and jumps — the jump wins.
@@ -118,6 +119,7 @@ export class Input {
   _handleMouseDown(event) {
     this.mouse.buttons |= 1 << event.button;
     bus.emit('input:mouse', { button: event.button, down: true });
+    // The first click on the canvas takes the pointer, so looking needs no extra key.
     if (event.button === 0 && !this.locked && this.canvas) this.requestLock();
   }
 

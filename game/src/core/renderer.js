@@ -1,7 +1,7 @@
-// WebGL renderer setup. One canvas, sRGB output, ACES tone mapping, a pixel ratio cap
-// and a resize handler that keeps the drawing buffer in step with the window. Shadow
-// maps stay off unless the quality preset explicitly allows them; nothing else in the
-// render path costs a second pass.
+// WebGL renderer setup. One canvas, sRGB output, ACES tone mapping, a pixel ratio cap and
+// a resize handler that keeps the drawing buffer in step with the window. Shadow maps stay
+// off unless the quality preset explicitly allows them; nothing else in the render path
+// costs a second pass.
 
 /**
  * Probes the renderer string on a throwaway context. Software rasterisers (SwiftShader,
@@ -20,6 +20,7 @@ function detectSoftwareRenderer() {
     gl.getExtension('WEBGL_lose_context')?.loseContext();
     return /swiftshader|llvmpipe|software|softpipe|mesa offscreen/i.test(name);
   } catch {
+    // A probe that cannot even build a context says nothing about the real one.
     return false;
   }
 }
@@ -55,6 +56,7 @@ export function createRenderer(canvas, settings) {
   renderer.userData.software = software;
 
   const resize = () => {
+    // Never let a collapsed window produce a zero-sized drawing buffer.
     const width = Math.max(320, window.innerWidth);
     const height = Math.max(240, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, settings.pixelRatioCap) * settings.renderScale);

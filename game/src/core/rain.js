@@ -16,8 +16,8 @@ export class Rain {
     this.positions = new Float32Array(DROPS * 3);
     this.speeds = new Float32Array(DROPS);
 
-    // A local LCG rather than Random: the drops need one float per spawn on the hot
-    // path, and every reload should place the same cloud.
+    // A local LCG rather than Random: the drops need one float per spawn on the hot path,
+    // and every reload should place the same cloud.
     let state = (seed >>> 0) || 7;
     const random = () => {
       state = (state * 1664525 + 1013904223) >>> 0;
@@ -57,6 +57,7 @@ export class Rain {
   }
 
   update(dt, camera) {
+    // Ease towards the target so a shower starts and stops instead of popping.
     this.intensity += (this.target - this.intensity) * Math.min(1, dt * 2.5);
     this.points.visible = this.intensity > 0.02;
     if (!this.points.visible || !camera) return;
