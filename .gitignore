@@ -1,5 +1,5 @@
-# Build output from `MAKEFUN_OUTPUT_DIR=out node main.ts` and local captures.
+# Build output from `MAKEFUN_OUTPUT_DIR=out node main.ts`, plus local captures.
 out/
+out2/
 node_modules/
 .DS_Store
-out2/

@@ -1,9 +1,9 @@
-// Solmara Streets: a make.fun gta6-01 entry. The game is this directory's game/
-// folder: plain static files a desktop browser loads with no build step, no network
-// request and no runtime dependency beyond the three.js build vendored beside them.
-// This program checks that the entry is intact, copies game/ and screenshots/ beside
-// itself to /output, and writes /output/dossier.json, the summary the judge reads,
-// using the vendored make.fun library.
+// Solmara Streets: a make.fun gta6-01 entry. The game is this directory's game/ folder:
+// plain static files a desktop browser loads with no build step, no network request and no
+// runtime dependency beyond the three.js build vendored beside them. This program checks
+// that the entry is intact, copies game/ and screenshots/ beside itself to /output, and
+// writes /output/dossier.json, the summary the judge reads, using the vendored make.fun
+// library.
 //
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Screenshots come from the deterministic shot rig:
@@ -28,10 +28,11 @@ const indexPath = join(gameDir, 'index.html');
 const threePath = join(gameDir, 'vendor', 'three.min.js');
 const mainModulePath = join(gameDir, 'src', 'main.js');
 
-// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the others refuse an entry the
-// scorer would refuse (more than 4 screenshots or one over 256 KiB; more than 993 files in game/ or 48 MiB of game
-// files, in all, or a path under game/ over 1000 bytes: game/ counts beside /output's own 1000-entry cap, its
-// screenshots/ and dossier.json).
+// The scorer's own caps (reference/gate.json): only text_max_bytes shapes the bytes; the
+// others refuse an entry the scorer would refuse (more than 4 screenshots or one over
+// 256 KiB; more than 993 files in game/ or 48 MiB of game files in all; a path under game/
+// over 1000 bytes). game/ counts beside /output's own 1000-entry cap, its screenshots/ and
+// dossier.json.
 const CAPS = {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
@@ -59,8 +60,8 @@ function fail(problems) {
 }
 
 // ------------------------------------------------------------------ preflight
-// An entry that cannot boot is worse than no entry, so the two files the page cannot
-// do without are checked before anything is copied.
+// An entry that cannot boot is worse than no entry, so the files the page cannot do
+// without are checked before anything is copied.
 const problems = [];
 const required = [
   {
@@ -123,8 +124,8 @@ process.stdout.write(
 );
 
 // ------------------------------------------------------------------ modules
-// Every own ES module in boot order, with the line count a reviewer can scan. The
-// listing is read from game/ itself, so it can never drift from what ships.
+// Every own ES module in boot order, with the line count a reviewer can scan. The listing
+// is read from game/ itself, so it can never drift from what ships.
 const moduleRows = modules
   .slice()
   .sort((a, b) => a.path.localeCompare(b.path))
@@ -157,14 +158,14 @@ process.stdout.write(
 for (const row of shotRows) process.stdout.write(`  ${row.name.padEnd(28)} ${kib(row.bytes).padStart(8)}\n`);
 
 // ------------------------------------------------------------------ hand it in
-// The destination is cleared first: a stale screenshot from an earlier run would push
-// the set over the four-shot cap and refuse an otherwise good entry.
+// The destination is cleared first: a stale screenshot from an earlier run would push the
+// set over the four-shot cap and refuse an otherwise good entry.
 mkdirSync(out, { recursive: true });
 rmSync(join(out, 'game'), { recursive: true, force: true });
 rmSync(join(out, 'screenshots'), { recursive: true, force: true });
 cpSync(gameDir, join(out, 'game'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+if (existsSync(screenshotsDir)) cpSync(screenshotsDir, join(out, 'screenshots'), { recursive: true });
 
 try {
   writeFileSync(join(out, 'dossier.json'), buildDossier(out, CAPS));

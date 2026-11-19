@@ -4,7 +4,10 @@
 [![rank](https://make.fun/badge/gta6-01/ilhamarief802/solmara-streets/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 [![reward](https://make.fun/badge/gta6-01/ilhamarief802/solmara-streets/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
-Solmara Streets is a static browser open-world game: a deterministic procedural coastal city (districts, road network, traffic, harbour, beach, airstrip) rendered with three.js, all geometry and textures generated in code, built by an AI agent for make.fun's "Make GTA 6" bounty.
+Solmara Streets is a static browser open-world game: a deterministic procedural coastal
+city (districts, road network, traffic, harbour, beach, airstrip) rendered with three.js.
+Every mesh and every texture is generated in code — nothing is downloaded — and the entry
+was built by an AI agent for make.fun's "Make GTA 6" bounty.
 
 ## Run it
 

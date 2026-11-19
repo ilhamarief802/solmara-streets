@@ -50,7 +50,12 @@ bootStatus('Waking Solmara…');
 const canvas = document.getElementById('viewport');
 const renderer = createRenderer(canvas, settings);
 const scene = new THREE.Scene();
-const camera = new THREE.PerspectiveCamera(settings.fov, window.innerWidth / window.innerHeight, 0.35, settings.drawDistance);
+const camera = new THREE.PerspectiveCamera(
+  settings.fov,
+  window.innerWidth / window.innerHeight,
+  0.35,
+  settings.drawDistance,
+);
 camera.rotation.order = 'YXZ';
 renderer.userData.camera = camera;
 
@@ -130,6 +135,7 @@ const police = new PoliceSystem({
 });
 combat.setPolice(police);
 const missions = new MissionSystem({ world, scene, player, vehicles, police, combat, hud, seed: world.seed });
+// Wasted or busted: the same down state, decided by whoever is standing over you.
 combat.resolveDown = () => (police.isBustedNearby() ? 'busted' : 'wasted');
 combat.effects.setCamera(camera);
 
@@ -288,6 +294,7 @@ function handlePlayerActions() {
   }
 }
 
+/** Gets in the nearest car or out of the one being driven, then tells the police. */
 function enterOrLeaveCar() {
   const stolen = vehicles.tryEnter(player);
   if (player.car) cameraRig.timeSinceLook = 0;
