@@ -134,7 +134,10 @@ export class TrafficSystem {
       if (other.lane === chosen && Math.abs(other.s - along) < 12) return null;
     }
 
+    // The paint is drawn here, straight after the type, because the order of draws is what
+    // fixes each car's colour for a given seed.
     const type = pickType(this.random);
+    const color = TYPE_PAINT[type] ?? this.random.pick(CAR_COLORS);
     return {
       id: `traffic-${this.stats.spawns + this.cars.length + 1}-${this.random.int(0, 9999)}`,
       lane: chosen,
@@ -143,7 +146,7 @@ export class TrafficSystem {
       factor: this.random.range(0.85, 1.08),
       desired: chosen.speed * this.random.range(0.85, 1.08),
       type,
-      color: TYPE_PAINT[type] ?? this.random.pick(CAR_COLORS),
+      color,
       x,
       z,
       y: 0.09,
