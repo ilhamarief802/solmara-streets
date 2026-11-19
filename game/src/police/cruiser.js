@@ -6,6 +6,11 @@
 
 import { clamp, dampAngle, angleDelta, yawToward } from '../core/math.js';
 
+/** Inside this range the cruiser gives up on lanes and drives straight at the player. */
+const OFF_GRAPH = 32;
+/** How far past a lane's end the cruiser keeps driving before it takes the next lane. */
+const LANE_ARRIVAL = 9;
+
 export class PursuitCruiser {
   constructor({ world, x, z, heading, lane = null, mode = 'chase', speed = 0 }) {
     this.world = world;
@@ -40,6 +45,7 @@ export class PursuitCruiser {
     this.view = view;
     view.group.position.set(this.x, this.y, this.z);
     view.group.rotation.y = this.heading;
+
     // Two additive pips over the roof bar, so the lights flash beyond the static paint.
     const geometry = new THREE.BoxGeometry(0.44, 0.1, 0.24);
     const red = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xff2a1f, transparent: true, opacity: 0.9 }));
@@ -58,41 +64,37 @@ export class PursuitCruiser {
       const midX = lane.from.x + lane.dirX * lane.length * 0.5;
       const midZ = lane.from.z + lane.dirZ * lane.length * 0.5;
       const distance = Math.hypot(midX - x, midZ - z);
-      if (distance < bestDistance) {
-        bestDistance = distance;
-        best = lane;
-      }
+      if (distance >= bestDistance) continue;
+      bestDistance = distance;
+      best = lane;
     }
     return { lane: best, distance: bestDistance };
   }
 
   /** Picks the lane leaving the current one's end that brings the cruiser closer. */
   chooseNext(player) {
-    const lanes = this.world.plan.lanes;
     const endNode = this.lane?.endNode ?? this.lane?.edge?.b;
     let best = null;
     let bestScore = Infinity;
-    for (const lane of lanes) {
-      const start = lane.startNode;
-      if (endNode && start !== endNode) continue;
+
+    for (const lane of this.world.plan.lanes) {
+      if (endNode && lane.startNode !== endNode) continue;
       if (lane === this.lane) continue;
       const end = this.laneEnd(lane);
       const distance = Math.hypot(end.x - player.x, end.z - player.z);
+      // A lane roughly parallel to the current one is preferred over a hard turn.
       const dot = this.lane ? lane.dirX * this.lane.dirX + lane.dirZ * this.lane.dirZ : 0;
       const score = distance - dot * 16;
-      if (score < bestScore) {
-        bestScore = score;
-        best = lane;
-      }
+      if (score >= bestScore) continue;
+      bestScore = score;
+      best = lane;
     }
-    if (!best) {
-      // No lane leaves this node (a bridgehead, say): aim at the nearest lane in the city.
-      best = PursuitCruiser.nearestLane(this.world, player.x, player.z).lane;
-    }
-    return best;
+
+    // No lane leaves this node (a bridgehead, say): head for the nearest one instead.
+    return best ?? PursuitCruiser.nearestLane(this.world, player.x, player.z).lane;
   }
 
-  /** Puts the cruiser at the start of a lane, pointing down it. */
+  /** Puts the cruiser at the middle of a lane, pointing down it. */
   static fromLane(world, lane, along = null, mode = 'chase') {
     const s = along ?? lane.length * 0.5;
     return new PursuitCruiser({
@@ -110,18 +112,20 @@ export class PursuitCruiser {
     this.blink += dt;
     this.ramCooldown = Math.max(0, this.ramCooldown - dt);
     if (this.mode === 'block') {
+      // A roadblock holds its ground; only the lights move.
       this.speed = 0;
       this.syncView(dt);
       this.updateLights();
       return;
     }
+
     const playerX = player.position.x;
     const playerZ = player.position.z;
     const distance = Math.hypot(playerX - this.x, playerZ - this.z);
 
     let targetX;
     let targetZ;
-    if (distance < 32) {
+    if (distance < OFF_GRAPH) {
       // Close enough: leave the graph and go for the body itself.
       targetX = playerX;
       targetZ = playerZ;
@@ -130,7 +134,7 @@ export class PursuitCruiser {
     } else {
       // The lane end is the waypoint; once it is reached, take the next lane.
       const end = this.laneEnd(this.lane);
-      if (Math.hypot(end.x - this.x, end.z - this.z) < 9 && this.retarget <= 0) {
+      if (Math.hypot(end.x - this.x, end.z - this.z) < LANE_ARRIVAL && this.retarget <= 0) {
         this.retarget = 0.5;
         this.lane = this.chooseNext(player);
         if (this.lane) this.waypoint = this.laneEnd(this.lane);
@@ -159,13 +163,11 @@ export class PursuitCruiser {
     if (Math.hypot(resolved.x - nx, resolved.z - nz) > 0.02) this.speed *= 0.55;
     this.x = resolved.x;
     this.z = resolved.z;
-    const surface = this.world.walk.surfaceAt(this.x, this.z);
-    this.y = surface.y;
+    this.y = this.world.walk.surfaceAt(this.x, this.z).y;
 
-    // A cruiser wedged on a kerb or wall backs off after a moment and re-enters the graph.
+    // A cruiser wedged on a kerb or a wall backs off after a moment and rejoins the graph.
     const moved = Math.hypot(this.x - this.lastX, this.z - this.lastZ);
-    if (moved < 0.4 * dt * 10) this.stuckClock += dt;
-    else this.stuckClock = 0;
+    this.stuckClock = moved < 0.4 * dt * 10 ? this.stuckClock + dt : 0;
     this.lastX = this.x;
     this.lastZ = this.z;
     if (this.stuckClock > 2.4) {
@@ -190,6 +192,7 @@ export class PursuitCruiser {
 
   updateLights() {
     if (!this.lights) return;
+    // One bar, alternating: the pips never both light, which is what reads as a strobe.
     const on = Math.sin(this.blink * 7.5) > 0;
     this.lights.red.visible = on;
     this.lights.blue.visible = !on;
