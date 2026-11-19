@@ -1,9 +1,9 @@
 // Third-person camera rig. The mouse turns it (pointer lock), the wheel changes the boom
 // length, and the rig answers to the city: a camera that would sit inside a wall is pulled
-// in along its boom until the shot is clear, and never drops under the pavement. On foot
-// the character turns to the camera; in a car the rig settles behind the boot and damps
-// back there after the mouse has had its look. V switches to a close, first-person view
-// that keeps the same yaw and pitch.
+// in along its boom until the shot is clear, and never drops under the pavement. On foot the
+// character turns to the camera; in a car the rig settles behind the boot and damps back
+// there after the mouse has had its look. V switches to a close, first-person view that
+// keeps the same yaw and pitch.
 
 import { clamp, damp, dampAngle } from '../core/math.js';
 
@@ -32,12 +32,14 @@ function rayBox(origin, dir, box, maxT) {
     let near = (min - start) / step;
     let far = (max - start) / step;
     if (near > far) {
+      // Keep `near` as the entry side whichever way the ray points.
       const swap = near;
       near = far;
       far = swap;
     }
     tmin = Math.max(tmin, near);
     tmax = Math.min(tmax, far);
+    // The slabs no longer overlap, so the ray misses the box.
     if (tmin > tmax) return null;
   }
   return tmin;
@@ -91,6 +93,7 @@ export class OrbitCamera {
     const { player } = this;
     const car = context.car ?? player.car ?? null;
     const driving = Boolean(car);
+    // The render delta can spike; the camera never needs a bigger step than a tenth.
     const step = Math.min(dt, 0.1);
     const input = this.input;
 
@@ -99,6 +102,7 @@ export class OrbitCamera {
     if (Math.abs(look.x) + Math.abs(look.y) > 1e-5) this.timeSinceLook = 0;
     else this.timeSinceLook += step;
 
+    // Arrow keys are the keyboard's way of looking, for players without a mouse.
     if (input?.isDown('cameraLeft')) this.yaw += step * 1.8;
     if (input?.isDown('cameraRight')) this.yaw -= step * 1.8;
     if (input?.isDown('lookUp')) this.pitch = clamp(this.pitch - step * 1.1, PITCH_MIN, PITCH_MAX);
@@ -124,11 +128,13 @@ export class OrbitCamera {
     const focus = car
       ? { x: car.x, y: car.y + 1.05, z: car.z }
       : { x: player.position.x, y: player.position.y + 1.45, z: player.position.z };
+    // A car moves faster, so its boom follows tighter; the vertical axis always lags.
     const followSpeed = driving ? 16 : 12;
     this.anchor.x = damp(this.anchor.x, focus.x, followSpeed, step);
     this.anchor.y = damp(this.anchor.y, focus.y, followSpeed * 0.7, step);
     this.anchor.z = damp(this.anchor.z, focus.z, followSpeed, step);
 
+    // First person only makes sense on foot: getting in a car drops back to the boom.
     this.firstPerson = this.firstPerson && !driving;
     const targetDistance = this.firstPerson ? 0 : driving ? clamp(this.zoom + 1.9, 3.4, 10) : this.zoom;
     this.distance = damp(this.distance, targetDistance, 9, step);
@@ -160,9 +166,11 @@ export class OrbitCamera {
       const length = Math.hypot(dx, dy, dz) || 1;
       const dir = { x: dx / length, y: dy / length, z: dz / length };
       let nearest = 1;
+      // Only the boxes along the boom's midpoint can be in the way.
       for (const box of this.world.colliders.near((origin.x + px) / 2, (origin.z + pz) / 2, length * 0.6 + 1)) {
         const hit = rayBox(origin, dir, box, length);
         if (hit === null) continue;
+        // Keep a 35 cm standoff from the wall, and never collapse the boom entirely.
         nearest = Math.min(nearest, clamp((hit - 0.35) / length, 0.08, 1));
       }
       if (nearest < 1) {
@@ -205,6 +213,7 @@ export class OrbitCamera {
     this.camera.position.set(px, py, pz);
     this.camera.lookAt(this._target.x, this._target.y, this._target.z);
 
+    // A slightly wider lens in a car and on foot in first person.
     const wantedFov = this.firstPerson ? 70 : driving ? 66 : 62;
     if (Math.abs(this.camera.fov - wantedFov) > 0.01) {
       this.camera.fov = damp(this.camera.fov, wantedFov, 6, step);

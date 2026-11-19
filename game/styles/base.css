@@ -1,5 +1,9 @@
-/* Solmara Streets page shell. No external fonts, no images: the palette and the boot
-   card are pure CSS, and the only moving part is the fade of the boot overlay. */
+/* Solmara Streets page shell. No external fonts, no images: the palette and the boot card
+   are pure CSS, and the only moving part is the fade of the boot overlay.
+
+   The rules are layered in the order they were written: the HUD section appears twice
+   (an early pass, then the session-3 layout) because the later block re-tunes the same
+   selectors. Keep new rules below the block they refine, or the cascade will bite. */
 
 /* Page chrome and the HUD draw from these tokens; retune a colour here, not in a rule. */
 
@@ -56,6 +60,7 @@ body {
   transition: opacity 750ms ease, visibility 750ms ease;
 }
 
+/* A faint scanline veil over the boot gradient, so the card reads as a screen. */
 .boot::after {
   content: "";
   position: absolute;
@@ -81,6 +86,7 @@ body {
   font-family: var(--mono);
   font-size: clamp(2.4rem, 9vw, 6.4rem);
   font-weight: 700;
+  /* The trailing negative margin cancels the last letter's tracking, keeping it centred. */
   letter-spacing: 0.42em;
   margin-right: -0.42em;
   color: var(--paper);
@@ -217,6 +223,7 @@ body {
   word-break: break-word;
 }
 
+/* The city stays visible behind a fault, but visibly wrong: the error card is the focus. */
 body.has-error #viewport {
   filter: saturate(0.4) brightness(0.55);
 }
@@ -383,6 +390,7 @@ body.has-error #viewport {
   transition: opacity 400ms ease;
 }
 
+/* While the player is down the HUD fades back, leaving the wasted/busted card to read. */
 .hud.is-down {
   opacity: 0.55;
 }
@@ -534,6 +542,7 @@ body.has-error #viewport {
   background: linear-gradient(90deg, #4fbd72, #a9e5b6);
 }
 
+/* Low health swaps the fill for the red gradient and sets it pulsing. */
 .hud-vital-bar.is-low .hud-vital-fill.health {
   background: linear-gradient(90deg, #c93a2c, #ff7a5a);
   animation: hud-pulse 0.9s ease-in-out infinite;
@@ -769,6 +778,7 @@ body.has-error #viewport {
   background: #ffe8c2;
 }
 
+/* A shotgun gets a wide ring; a shot tightens it for a frame. */
 .hud-crosshair.is-shotgun .hud-crosshair-ring {
   inset: 1px;
   border-color: rgba(255, 176, 102, 0.85);
@@ -980,6 +990,7 @@ body.is-rain #viewport {
   filter: saturate(0.82) brightness(0.9) hue-rotate(-7deg);
 }
 
+/* Screens streaks only while driving: on foot the rain stays on the far side of the glass. */
 body.is-rain.is-driving #weather-layer::after {
   content: "";
   position: absolute;
@@ -1315,6 +1326,7 @@ body.is-night .hud-prompt {
   pointer-events: none;
 }
 
+/* Headings never take a click either: they are type, not controls. */
 .menu-title,
 .menu-title-sm,
 .menu-subtitle,
@@ -1342,6 +1354,7 @@ body.is-night .hud-prompt {
   border-color: rgba(169, 229, 182, 0.25);
 }
 
+/* A capture run owns the frame: no menu, no cursor. */
 body.is-capture .menu-root {
   display: none !important;
 }
@@ -1363,4 +1376,3 @@ body.is-capture #viewport {
     display: none;
   }
 }
-
