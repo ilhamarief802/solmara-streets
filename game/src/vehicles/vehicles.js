@@ -242,6 +242,7 @@ export class VehicleSystem {
     let px = x;
     let pz = z;
     let blocked = false;
+    // Above roof height there is nothing to push against.
     const minHeight = options.minHeight ?? 0;
 
     // A car is a rounded rectangle: push out of its box in the car's own frame.

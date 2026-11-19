@@ -109,7 +109,7 @@ export class PedestrianSystem {
     this.focus.x = x;
     this.focus.z = z;
     this.fill();
-    this.draw(0);
+    this.draw();
     return this.peds.length;
   }
 
@@ -124,7 +124,7 @@ export class PedestrianSystem {
     this.count = next;
     if (this.peds.length > next) this.peds.length = next;
     else if (this.peds.length < next) this.fill();
-    this.draw(0);
+    this.draw();
     return this.peds.length;
   }
 
@@ -336,7 +336,7 @@ export class PedestrianSystem {
     }
     this.stats.fleeing = fleeing;
     this.stats.crossing = crossing;
-    this.draw(dt);
+    this.draw();
 
     this.respawnClock -= dt;
     if (this.respawnClock <= 0) {
@@ -463,7 +463,7 @@ export class PedestrianSystem {
   }
 
   /** Writes the seven instanced meshes from the ped list. */
-  draw(dt) {
+  draw() {
     const meshes = this.meshes;
     const sway = Math.sin(this.clock * 1.6) * 0.02;
     let hats = 0;

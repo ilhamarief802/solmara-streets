@@ -149,7 +149,7 @@ export class Player {
     }
 
     if (this.vehicles) {
-      const car = this.vehicles.resolveActor(px, pz, radius, { exclude: this.car, minHeight: feetY + 0.25 });
+      const car = this.vehicles.resolveActor(px, pz, radius, { minHeight: feetY + 0.25 });
       if (car.blocked) {
         px = car.x;
         pz = car.z;
