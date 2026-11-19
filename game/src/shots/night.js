@@ -1,7 +1,7 @@
-// Shot "night": the Neon Strip after dark, looking east down the avenue. A coupe sits in
-// the near lane with its lamps on, pedestrians work the lit pavements on both sides,
-// blade signs and windows glow above, and the HUD stays readable against the dark. The
-// camera is low on the near kerb and pushes slowly into the street.
+// Shot "night": the Neon Strip after dark, looking east down the avenue. A coupe sits in the
+// near lane with its lamps on, pedestrians work the lit pavements on both sides, blade signs
+// and windows glow above, and the HUD stays readable against the dark. The camera is low on
+// the near kerb and pushes slowly into the street.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 
@@ -31,8 +31,8 @@ export default {
     game.traffic.placeAhead(206, -697, Math.PI / 2, { distance: 24, count: 3, spacing: 18 });
     game.pedestrians.reset(seed, 206, -697, 34);
 
-    // Put four of the crowd on the two lit pavements, inside the frame the camera sees;
-    // they keep walking their rings once placed.
+    // Put four of the crowd on the two lit pavements, inside the frame the camera sees; they
+    // keep walking their rings once placed.
     const stage = (index, x, z, heading) => {
       const ped = game.pedestrians.peds[index];
       if (!ped) return;
@@ -41,6 +41,7 @@ export default {
       ped.heading = heading;
       ped.mode = 'ring';
       ped.speed = 0.9;
+      // Give them a target nine metres ahead so they walk through the frame, not out of it.
       ped.target = { x: x + Math.sin(heading) * 9, z: z + Math.cos(heading) * 9 };
       ped.nextCorner = ped.corner;
     };
@@ -90,6 +91,7 @@ export default {
 
     this.origin = { x: 186.5, y: 2.5, z: -692.5 };
     this.target = { x: 238, y: 1.9, z: -700.5 };
+    // Night needs a stop and a half more exposure than the daytime shots.
     ctx.rig.exposure = 1.55;
     ctx.camera.fov = 64;
     ctx.camera.updateProjectionMatrix();

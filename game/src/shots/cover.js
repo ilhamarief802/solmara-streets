@@ -1,8 +1,8 @@
-// Shot "cover": the money frame. A stolen teal coupe on the Avenida Sol at golden hour,
-// seen from low behind its off-side quarter; traffic runs with it, pedestrians work the
-// pavement, the HUD carries money and the minimap, and the downtown towers close the far
-// end of the boulevard behind a low sun. The camera pushes in a hand's width over the
-// warm-up and then holds for the shutter.
+// Shot "cover": the money frame. A stolen teal coupe on the Avenida Sol at golden hour, seen
+// from low behind its off-side quarter; traffic runs with it, pedestrians work the pavement,
+// the HUD carries money and the minimap, and the downtown towers close the far end of the
+// boulevard behind a low sun. The camera pushes in a hand's width over the warm-up and then
+// holds for the shutter.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 
@@ -12,6 +12,7 @@ export default {
   description: 'A stolen coupe on the downtown boulevard at golden hour, traffic, crowd, HUD and skyline',
   setup(ctx) {
     const { clock, weather, game, seed } = ctx;
+    // A fixed clock keeps the light exactly where the palette was tuned for it.
     clock.fixed = true;
     clock.setHour(17.45);
     weather.set('hazy');
@@ -28,8 +29,8 @@ export default {
     car.autopilot = { throttle: 0.3, steer: 0, handbrake: false };
     this.car = car;
 
-    // The boulevard is busy in both directions and the pavement has a crowd: the street
-    // has to read as a city, not a stage.
+    // The boulevard is busy in both directions and the pavement has a crowd: the street has
+    // to read as a city, not a stage.
     game.traffic.reset(seed, car.x, car.z, 30);
     game.traffic.placeAhead(car.x, car.z, car.heading, { distance: 26, count: 3, spacing: 18 });
     game.pedestrians.reset(seed, car.x, car.z, 32);
@@ -40,12 +41,14 @@ export default {
     game.cameraRig.timeSinceLook = 0;
     if (game.police) {
       game.police.clearWanted('shot');
+      // The response stands where it was put for the whole shot.
       game.police.staged = true;
     }
     if (game.missions) {
       game.missions.money = 2450;
       game.missions.active = null;
       game.missions.markersHidden = true;
+      // A posed shot never writes the save.
       game.missions.silent = true;
     }
     // A fixed HUD snapshot: the shot must not wait on the simulation's own refresh.
@@ -76,6 +79,7 @@ export default {
     if (!car) return;
 
     const t = easeInOutCubic(clamp01(elapsed / 8));
+    // The car's own frame: forward along its nose, right towards the kerb.
     const fx = Math.sin(car.heading);
     const fz = Math.cos(car.heading);
     const rx = Math.cos(car.heading);
@@ -84,15 +88,12 @@ export default {
     const side = this.from.side + (this.to.side - this.from.side) * t;
     const up = this.from.up + (this.to.up - this.from.up) * t;
     const look = this.from.look + (this.to.look - this.from.look) * t;
+    // A hand-held bob, a few centimetres: enough that the frame is alive, not shaky.
     const bob = Math.sin(elapsed * 2.1) * 0.025;
 
-    // The camera rides the car: back along its nose, off to the kerb side, a hand above
-    // the roof, looking down the boulevard past it.
-    ctx.camera.position.set(
-      car.x - fx * back + rx * side,
-      car.y + up + bob,
-      car.z - fz * back + rz * side,
-    );
+    // The camera rides the car: back along its nose, off to the kerb side, a hand above the
+    // roof, looking down the boulevard past it.
+    ctx.camera.position.set(car.x - fx * back + rx * side, car.y + up + bob, car.z - fz * back + rz * side);
     ctx.camera.lookAt(car.x + fx * look, car.y + 2.6, car.z + fz * look);
   },
 };

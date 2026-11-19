@@ -1,7 +1,7 @@
 // Shot "mission": a live objective at the marina. The player is on foot on the waterfront
-// pavement a short walk from the marker; the mission card carries the real objective text
-// and clock, the beacon stands at the fish market, and the minimap holds the diamond. The
-// camera is low behind his shoulder, looking down the quay.
+// pavement a short walk from the marker; the mission card carries the real objective text and
+// clock, the beacon stands at the fish market, and the minimap holds the diamond. The camera
+// is low behind his shoulder, looking down the quay.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 
@@ -24,8 +24,8 @@ export default {
     game.pedestrians.reset(seed, -358, 84, 30);
     game.pedestrians.placeAround(-360, 78, 5, 40);
 
-    // Two of them on the pavement in the sight line to the market, so the walk is alive:
-    // only their pose is scripted, the walk itself stays live.
+    // Two of them on the pavement in the sight line to the market, so the walk is alive: only
+    // their pose is scripted, the walk itself stays live.
     const stage = (index, x, z) => {
       const ped = game.pedestrians.peds[index];
       if (!ped) return;
@@ -49,6 +49,7 @@ export default {
       missions.markersHidden = false;
       missions.money = 2450;
       missions.start('dock-run', { scripted: true });
+      // Pick the clock up part-walked, so the card's bar is not full.
       if (missions.active) missions.active.timer = 138;
       game.hud?.update({
         mission: missions.objective,

@@ -1,11 +1,11 @@
-// Shot "shootout": the harbour quay at dusk, the warehouses dark behind, a pistol going off
-// in the player's hands and two officers working the same crew. The muzzle flash and tracer
-// are held for the shutter, the thugs are fixed in their poses, and the HUD carries three
-// stars and the mission card for the fight.
+// Shot "shootout": the harbour quay at dusk, the warehouses dark behind, a pistol going off in
+// the player's hands and two officers working the same crew. The muzzle flash and tracer are
+// held for the shutter, the thugs are fixed in their poses, and the HUD carries three stars and
+// the mission card for the fight.
 //
 // Everything in the frame is the game's own: thugs from combat.spawnThug, officers from
-// police.spawnCop, flash and tracer from combat.effects. The quay south of the warehouses is
-// the one stretch of open road with a clean sight line to the loading doors.
+// police.spawnCop, flash and tracer from combat.effects. The quay south of the warehouses is the
+// one stretch of open road with a clean sight line to the loading doors.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 
@@ -38,6 +38,7 @@ export default {
     game.traffic.reset(seed, -640, 604, 12);
     game.pedestrians.reset(seed, -640, 604, 10);
 
+    // The crew, posed: stagedThugs keeps combat from walking them during the warm-up.
     combat.clearThugs();
     combat.stagedThugs = true;
     for (const member of CREW) {
@@ -68,7 +69,7 @@ export default {
     combat.stats.hits = 2;
     combat.stageFire({ x: -636.2, y: 1.4, z: 603.2 }, { x: -647.5, y: 1.2, z: 589.2 }, { scale: 1.2, color: 0xffd9a0 });
 
-    // Both officers' shots, held lit.
+    // Both officers' shots, held lit. The muzzle is at the gun, the tracer ends on the crew.
     for (const [from, to, scale, width] of [
       [{ x: -648.2, y: 1.36, z: 609.2 }, { x: -663.2, y: 1.15, z: 593.2 }, 0.75, 0.03],
       [{ x: -633.8, y: 1.33, z: 597.5 }, { x: -646.5, y: 1.18, z: 589.4 }, 0.7, 0.028],

@@ -1,7 +1,7 @@
-// Shot "chase": three stars and three cruisers. The player's coupe runs north up the
-// Avenida with a cruiser on each shoulder and a third hanging back, lights strobing, the
-// HUD stars lit and the minimap showing the pursuit. The camera rides ahead of the pack
-// and looks back down the boulevard, so the whole chase is in one frame.
+// Shot "chase": three stars and three cruisers. The player's coupe runs north up the Avenida
+// with a cruiser on each shoulder and a third hanging back, lights strobing, the HUD stars lit
+// and the minimap showing the pursuit. The camera rides ahead of the pack and looks back down
+// the boulevard, so the whole chase is in one frame.
 
 import { clamp01, easeInOutCubic } from '../core/math.js';
 
@@ -40,12 +40,14 @@ export default {
 
     const police = game.police;
     police.clearWanted('shot');
+    // Staged: the cruisers keep the formation the shot gives them.
     police.staged = true;
 
     // Any cruiser an earlier scenario left behind is removed before the formation is set.
     for (const cruiser of police.cruisers) game.scene.remove(cruiser.view?.group);
     police.cruisers.length = 0;
 
+    // Place the pack in the car's own frame: behind the nose, one off each shoulder.
     const fx = Math.sin(car.heading);
     const fz = Math.cos(car.heading);
     const rx = Math.cos(car.heading);
@@ -118,11 +120,7 @@ export default {
     const lookBack = this.from.lookBack + (this.to.lookBack - this.from.lookBack) * t;
     const bob = Math.sin(elapsed * 2.8) * 0.03;
 
-    ctx.camera.position.set(
-      car.x + fx * ahead + rx * side,
-      car.y + up + bob,
-      car.z + fz * ahead + rz * side,
-    );
+    ctx.camera.position.set(car.x + fx * ahead + rx * side, car.y + up + bob, car.z + fz * ahead + rz * side);
     // Looking back down the boulevard: the car first, the cruisers stacked behind it.
     ctx.camera.lookAt(car.x + fx * lookBack, car.y + 0.95, car.z + fz * lookBack);
   },

@@ -1,7 +1,7 @@
-// The shot rig. A shot is a deterministic scenario: it sets the clock and weather, poses
-// a camera along a short keyframe path, warms up, then raises window.__SHOT_READY and puts
-// its short name in the title so a capture script knows the frame is stable. With no
-// ?shot= parameter the rig stays idle and the game boots normally.
+// The shot rig. A shot is a deterministic scenario: it sets the clock and weather, poses a
+// camera along a short keyframe path, warms up, then raises window.__SHOT_READY and puts its
+// short name in the title so a capture script knows the frame is stable. With no ?shot=
+// parameter the rig stays idle and the game boots normally.
 
 import { Random } from '../core/rng.js';
 import { easeInOutCubic, clamp01 } from '../core/math.js';
@@ -37,6 +37,7 @@ export class ShotRig {
     this.frames = 0;
     this.ready = false;
     this.random = new Random('shot');
+    // A capture is only stable once the camera path has settled and a few frames are drawn.
     this.warmupSeconds = 2.2;
     this.warmupFrames = 6;
     this.startedAt = 0;
@@ -84,6 +85,7 @@ export class ShotRig {
       renderer: this.game.renderer,
       rig: this,
     };
+    // A scenario poses the world once at t=0, then again on every apply().
     scenario.setup(this.context);
     this.apply(0);
     hideBootCard();
@@ -99,8 +101,8 @@ export class ShotRig {
   update() {
     if (!this.active || this.ready) return;
 
-    // Wall time, not the simulation step: a slow software renderer must still reach the
-    // end of the warm-up, and the camera path must not depend on the frame rate.
+    // Wall time, not the simulation step: a slow software renderer must still reach the end
+    // of the warm-up, and the camera path must not depend on the frame rate.
     this.elapsed = (performance.now() - this.startedAt) / 1000;
     this.frames += 1;
     this.apply(Math.min(this.elapsed, this.warmupSeconds + 1));
@@ -145,6 +147,7 @@ export function cameraMove(ctx, elapsed, from, to, lookFrom, lookTo, { duration 
     lookFrom.y + (lookTo.y - lookFrom.y) * t,
     lookFrom.z + (lookTo.z - lookFrom.z) * t,
   );
+  // The lens is fixed for the whole move, so the projection is only rebuilt when it changes.
   if (camera.fov !== fov) {
     camera.fov = fov;
     camera.updateProjectionMatrix();
