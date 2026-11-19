@@ -1,6 +1,6 @@
 // Deterministic randomness. Every district, block, window and palm in Solmara comes
 // out of these streams, so the same seed always produces the same city. Nothing here
-// touches Math.random: a shot must be reproducible frame for frame.
+// touches Math.random: a shot has to be reproducible frame for frame.
 
 /** Turns a short label into a 32-bit seed, FNV-1a style. */
 export function hashLabel(label) {
@@ -13,7 +13,7 @@ export function hashLabel(label) {
   return hash >>> 0;
 }
 
-/** mulberry32: small, fast, good enough for city planning. */
+/** mulberry32: small, fast, and plenty for city planning. */
 export function mulberry32(seed) {
   let state = seed >>> 0;
   return function next() {
@@ -26,8 +26,8 @@ export function mulberry32(seed) {
 }
 
 /**
- * A named random stream. `fork(label)` gives an independent child stream, which is
- * how the plan, each district's props and each shot keep out of each other's way.
+ * A named random stream. `fork(label)` gives an independent child stream, which is how
+ * the plan, each district's props and each shot keep out of each other's way.
  */
 export class Random {
   constructor(seed = 'solmara') {
@@ -73,7 +73,7 @@ export class Random {
     return this.float() * 2 - 1;
   }
 
-  /** Fisher-Yates, in place, returns the same array. */
+  /** Fisher-Yates, in place; returns the same array. */
   shuffle(list) {
     for (let i = list.length - 1; i > 0; i -= 1) {
       const j = this.int(0, i);
@@ -96,7 +96,7 @@ export class Random {
   }
 }
 
-/** Picks from [{ weight, value }] (or [{ weight, ...anything }]) by weight. */
+/** Picks from [{ weight, ...anything }] by weight. */
 export function weightedPick(random, entries) {
   let total = 0;
   for (const entry of entries) total += Math.max(0, entry.weight ?? 1);

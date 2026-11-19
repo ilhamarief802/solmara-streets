@@ -84,12 +84,14 @@ const PHASE_TABLE = [
   { until: 24.1, id: 'night', label: 'Night' },
 ];
 
-function colorTriple(hex) {
-  return [(hex >> 16) & 255, (hex >> 8) & 255, hex & 255].map((channel) => channel / 255);
+// Palette channels that are sRGB hex rather than plain scalars.
+const COLOR_KEYS = new Set(['skyTop', 'skyHorizon', 'sunColor', 'ambientSky', 'ambientGround', 'fogColor']);
+
+function rgbTriple(hex) {
+  return [((hex >> 16) & 255) / 255, ((hex >> 8) & 255) / 255, (hex & 255) / 255];
 }
 
 function interpolateStops(hour) {
-  const COLOR_KEYS = new Set(['skyTop', 'skyHorizon', 'sunColor', 'ambientSky', 'ambientGround', 'fogColor']);
   let a = PALETTE_STOPS[0];
   let b = PALETTE_STOPS[1];
   for (let i = 0; i < PALETTE_STOPS.length - 1; i += 1) {
@@ -106,7 +108,9 @@ function interpolateStops(hour) {
     const av = a[key];
     const bv = b[key];
     if (COLOR_KEYS.has(key)) {
-      out[key] = colorTriple(av).map((value, i) => lerp(value, colorTriple(bv)[i], t));
+      const from = rgbTriple(av);
+      const to = rgbTriple(bv);
+      out[key] = [lerp(from[0], to[0], t), lerp(from[1], to[1], t), lerp(from[2], to[2], t)];
     } else {
       out[key] = av === bv ? av : lerp(av, bv, t);
     }
@@ -129,12 +133,12 @@ export function formatHour(hour) {
 /** The direction from the city towards the sun, in three.js space. */
 export function sunDirection(hour, out = new THREE.Vector3()) {
   const wrapped = wrap(hour, 24);
+  // The sun rises at 06:00, crosses at noon and sets at 18:00; +Z keeps the light
+  // slightly behind the downtown grid so the boulevards catch a long shadow.
   const arc = ((wrapped - 6) / 12) * Math.PI;
-  const elevation = Math.sin(arc);
   const x = Math.cos(arc);
-  const y = elevation * 0.94;
-  const z = 0.52;
-  return out.set(x, y, z).normalize();
+  const y = Math.sin(arc) * 0.94;
+  return out.set(x, y, 0.52).normalize();
 }
 
 export class GameClock {
@@ -172,10 +176,10 @@ export class GameClock {
 
   update(dt) {
     if (this.fixed || dt <= 0) return;
-    const gameMinutesPerSecond = (24 * 60) / this.minutesPerDay;
+    const gameMinutesPerSecond = (DAY_HOURS * 60) / this.minutesPerDay;
     this.minutes += dt * gameMinutesPerSecond * this.timeScale;
-    while (this.minutes >= 24 * 60) {
-      this.minutes -= 24 * 60;
+    while (this.minutes >= DAY_HOURS * 60) {
+      this.minutes -= DAY_HOURS * 60;
       this.day += 1;
     }
   }
@@ -200,19 +204,26 @@ export class GameClock {
 
   /** A palette for the current minute, cached and shared. */
   palette() {
+    // Two simulated minutes per cache key: the interpolation is slower than that.
     const key = Math.floor(this.minutes / 2);
     if (key === this._lastKey && this._palette) return this._palette;
-    const raw = interpolateStops(this.hour);
-    raw.night = 1 - smoothstep(5.2, 7.1, this.hour) + smoothstep(19.4, 20.8, this.hour);
-    raw.night = clamp(raw.night, 0, 1);
-    raw.sunElevation = sunDirection(this.hour, this._sun).y;
-    raw.sunDir = this._sun;
-    raw.moonDir = this._moon.copy(this._sun).multiplyScalar(-1);
-    raw.hour = this.hour;
-    raw.phase = this.phase.id;
-    raw.label = this.label;
-    this._palette = raw;
+
+    const palette = interpolateStops(this.hour);
+    // How dark it is overall, 0 at noon and 1 at midnight — the stars and the window
+    // glow both ride on it.
+    palette.night = clamp(
+      1 - smoothstep(5.2, 7.1, this.hour) + smoothstep(19.4, 20.8, this.hour),
+      0,
+      1,
+    );
+    palette.sunElevation = sunDirection(this.hour, this._sun).y;
+    palette.sunDir = this._sun;
+    palette.moonDir = this._moon.copy(this._sun).multiplyScalar(-1);
+    palette.hour = this.hour;
+    palette.phase = this.phase.id;
+    palette.label = this.label;
+    this._palette = palette;
     this._lastKey = key;
-    return raw;
+    return palette;
   }
 }

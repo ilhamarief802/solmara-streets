@@ -1,4 +1,4 @@
-// The frame loop: a fixed-step simulation (60 Hz) with a render every animation frame.
+// The frame loop: a fixed-step simulation (60 Hz) with one render per animation frame.
 // A pause switch stops the simulation but keeps drawing, so the city can be inspected
 // while frozen. Stats are kept for the perf overlay and for the shots' warm-up check.
 
@@ -20,11 +20,11 @@ export class GameLoop {
     this._smoothedMs = 16.7;
     this._last = 0;
     this._raf = 0;
+    this._secondClock = 0;
     this._tick = this._tick.bind(this);
     this.onUpdate = null;
     this.onRender = null;
     this.onSecond = null;
-    this._secondClock = 0;
   }
 
   start() {
@@ -42,6 +42,7 @@ export class GameLoop {
 
   setPaused(paused) {
     this.paused = Boolean(paused);
+    // Dropping the backlog keeps the first frame after a resume from double-stepping.
     this.accumulator = 0;
   }
 
@@ -61,26 +62,28 @@ export class GameLoop {
     this.fps = 1000 / Math.max(1e-3, this._smoothedMs);
     this.frames += 1;
 
-    if (!this.paused) {
-      this.accumulator += frameSeconds;
-      let steps = 0;
-      while (this.accumulator >= this.fixedStep && steps < this.maxUpdatesPerFrame) {
-        this.time += this.fixedStep;
-        this.updates += 1;
-        this.accumulator -= this.fixedStep;
-        steps += 1;
-        if (this.onUpdate) this.onUpdate(this.fixedStep, this.time);
-      }
-      // A long stall (a tab in the background) drops its backlog instead of spiralling.
-      if (steps === this.maxUpdatesPerFrame) this.accumulator = 0;
-    }
-
+    if (!this.paused) this._simulate(frameSeconds);
     if (this.onRender) this.onRender(frameSeconds, this.time);
+
     this._secondClock += frameSeconds;
     if (this._secondClock >= 1) {
       this._secondClock %= 1;
       if (this.onSecond) this.onSecond(this.fps);
     }
+  }
+
+  _simulate(frameSeconds) {
+    this.accumulator += frameSeconds;
+    let steps = 0;
+    while (this.accumulator >= this.fixedStep && steps < this.maxUpdatesPerFrame) {
+      this.time += this.fixedStep;
+      this.updates += 1;
+      this.accumulator -= this.fixedStep;
+      steps += 1;
+      if (this.onUpdate) this.onUpdate(this.fixedStep, this.time);
+    }
+    // A long stall (a backgrounded tab) drops its backlog instead of spiralling.
+    if (steps === this.maxUpdatesPerFrame) this.accumulator = 0;
   }
 }
 
@@ -89,7 +92,7 @@ export function nextFrame() {
   return new Promise((resolve) => requestAnimationFrame(resolve));
 }
 
-/** Waits for n animation frames, optionally with a callback between them. */
+/** Waits for `count` animation frames, optionally with a callback between them. */
 export async function frames(count, between = null) {
   for (let i = 0; i < count; i += 1) {
     await nextFrame();

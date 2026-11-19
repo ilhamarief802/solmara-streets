@@ -1,7 +1,7 @@
-// The seven districts of Solmara. Each is a small data record: where it sits, how tall
-// it builds, which facades and neon it likes, and what street furniture it tolerates.
-// The plan zones blocks from these rectangles; buildings, textures and props read the
-// palette and density, so a district looks like itself everywhere.
+// The seven districts of Solmara. Each one is a small data record: where it sits, how
+// tall it builds, which facades and neon it likes, and what street furniture it
+// tolerates. The plan zones blocks from these rectangles; buildings, textures and props
+// read the palette and density, so a district looks like itself everywhere.
 
 export const DISTRICTS = {
   downtown: {
@@ -172,6 +172,8 @@ export const DISTRICT_IDS = ['downtown', 'marina', 'verano', 'neon', 'harbour', 
 /** The playable land rectangle, slightly outside the built districts. */
 export const LAND_BOUNDS = { minX: -920, minZ: -980, maxX: 1280, maxZ: 680 };
 
+// The order rectangles are tested in: the small, specific districts win any overlap
+// with the big downtown and marina rectangles.
 const LOOKUP_ORDER = ['airstrip', 'harbour', 'beach', 'neon', 'downtown', 'marina', 'verano'];
 
 function inside(bounds, x, z) {
@@ -179,7 +181,7 @@ function inside(bounds, x, z) {
 }
 
 /**
- * The district at a position. Water gets the nearest shore district so a boat or a
+ * The district at a position. Water gets the nearest shore district, so a boat or a
  * swimmer still reports something sensible.
  */
 export function districtIdAt(x, z, isWater = false) {
@@ -201,7 +203,7 @@ export function districtOf(id) {
   return DISTRICTS[id] ?? DISTRICTS.downtown;
 }
 
-/** Cycles a palette array safely. */
+/** Cycles a palette array safely, including for negative indices. */
 export function paletteColor(palette, index) {
   const list = palette?.facades ?? DISTRICTS.downtown.palette.facades;
   return list[((index % list.length) + list.length) % list.length];

@@ -4,10 +4,9 @@
 // render path costs a second pass.
 
 /**
- * Probes the WebGL renderer string on a throwaway context. Software rasterisers
- * (SwiftShader, llvmpipe) need a smaller drawing buffer and no MSAA to stay playable,
- * and knowing that before the real context is created is the only way to skip
- * antialiasing at construction time.
+ * Probes the renderer string on a throwaway context. Software rasterisers (SwiftShader,
+ * llvmpipe) need a smaller drawing buffer and no MSAA to stay playable, and knowing that
+ * before the real context exists is the only way to skip antialiasing at construction.
  */
 function detectSoftwareRenderer() {
   try {
@@ -18,8 +17,7 @@ function detectSoftwareRenderer() {
     if (!gl) return true;
     const info = gl.getExtension('WEBGL_debug_renderer_info');
     const name = info ? String(gl.getParameter(info.UNMASKED_RENDERER_WEBGL)) : '';
-    const lose = gl.getExtension('WEBGL_lose_context');
-    if (lose) lose.loseContext();
+    gl.getExtension('WEBGL_lose_context')?.loseContext();
     return /swiftshader|llvmpipe|software|softpipe|mesa offscreen/i.test(name);
   } catch {
     return false;
@@ -28,7 +26,7 @@ function detectSoftwareRenderer() {
 
 export function createRenderer(canvas, settings) {
   // A shot may render at 0.85 on software for a cleaner capture; normal play drops to
-  // 0.55 so a CPU rasteriser can hold a useful frame rate at 1280x577.
+  // 0.55 so a CPU rasteriser can still hold a useful frame rate.
   const software = detectSoftwareRenderer();
   if (software) {
     settings.software = true;
@@ -61,9 +59,10 @@ export function createRenderer(canvas, settings) {
     const height = Math.max(240, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, settings.pixelRatioCap) * settings.renderScale);
     renderer.setSize(width, height, false);
-    if (renderer.userData.camera) {
-      renderer.userData.camera.aspect = width / height;
-      renderer.userData.camera.updateProjectionMatrix();
+    const camera = renderer.userData.camera;
+    if (camera) {
+      camera.aspect = width / height;
+      camera.updateProjectionMatrix();
     }
   };
   window.addEventListener('resize', resize);
@@ -72,10 +71,11 @@ export function createRenderer(canvas, settings) {
 }
 
 export function setExposure(renderer, exposure) {
+  // Only touch the renderer when it would actually change: this runs every frame.
   if (Math.abs(renderer.toneMappingExposure - exposure) > 0.002) renderer.toneMappingExposure = exposure;
 }
 
-/** Renderer.info in a shape the perf overlay and the smoke test can print. */
+/** Renderer.info in the shape the perf overlay and the smoke test print. */
 export function drawnTriangles(renderer) {
   const info = renderer.info;
   return {

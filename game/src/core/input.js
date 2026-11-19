@@ -1,6 +1,6 @@
-// Keyboard and mouse, with pointer lock. Later sessions drive the player from the
-// action map below; the world session uses it for the debug camera and time controls.
-// Listeners are attached to window and the canvas, and every binding is remappable.
+// Keyboard and mouse with pointer lock. The player, the camera and the menus all read
+// the same action map; every binding is remappable and every query is a no-op while
+// input is disabled (the title screen keeps the world frozen that way).
 
 import { bus } from './events.js';
 
@@ -38,6 +38,7 @@ export class Input {
     this.locked = false;
     this.enabled = true;
     this.pointerSensitivity = 0.0022;
+    // Bound once so detach() can remove exactly the listeners attach() added.
     this._onKeyDown = this._handleKeyDown.bind(this);
     this._onKeyUp = this._handleKeyUp.bind(this);
     this._onMouseMove = this._handleMouseMove.bind(this);
@@ -46,6 +47,7 @@ export class Input {
     this._onWheel = this._handleWheel.bind(this);
     this._onLockChange = this._handleLockChange.bind(this);
     this._onBlur = this._handleBlur.bind(this);
+    this._onContextMenu = (event) => event.preventDefault();
     this.attach();
   }
 
@@ -59,7 +61,7 @@ export class Input {
     if (this.canvas) {
       this.canvas.addEventListener('mousedown', this._onMouseDown);
       this.canvas.addEventListener('mouseup', this._onMouseUp);
-      this.canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+      this.canvas.addEventListener('contextmenu', this._onContextMenu);
     }
   }
 
@@ -73,6 +75,7 @@ export class Input {
     if (this.canvas) {
       this.canvas.removeEventListener('mousedown', this._onMouseDown);
       this.canvas.removeEventListener('mouseup', this._onMouseUp);
+      this.canvas.removeEventListener('contextmenu', this._onContextMenu);
     }
     this.down.clear();
     this.pressed.clear();
@@ -81,11 +84,12 @@ export class Input {
 
   _handleKeyDown(event) {
     const code = event.code;
-    // Let the browser keep its reload, devtools and tab shortcuts.
+    // Let the browser keep its own reload, devtools and tab shortcuts.
     if (event.metaKey || event.ctrlKey || event.altKey) return;
     if (code === 'F3' || code === 'F5' || code === 'F11' || code === 'F12') event.preventDefault();
     if (!this.down.has(code)) this.pressed.add(code);
     this.down.add(code);
+    // Space scrolls the page and jumps — the jump wins.
     if (code === 'Space') event.preventDefault();
     bus.emit('input:key', { code, down: true, repeat: event.repeat });
   }
@@ -99,6 +103,7 @@ export class Input {
 
   _handleMouseMove(event) {
     if (!this.locked) {
+      // Unlocked, the pointer is only tracked as a 0..1 position for the menus.
       const rect = this.canvas?.getBoundingClientRect?.();
       if (rect && rect.width) {
         this.mouse.x = (event.clientX - rect.left) / rect.width;
@@ -122,6 +127,7 @@ export class Input {
   }
 
   _handleWheel(event) {
+    // Unlocked, the wheel belongs to the page; locked, to the camera zoom.
     if (!this.locked) return;
     event.preventDefault();
     this.mouse.wheel += Math.sign(event.deltaY);
@@ -133,15 +139,16 @@ export class Input {
   }
 
   _handleBlur() {
+    // A tab switch releases every key; without this the player would keep running.
     this.down.clear();
     this.pressed.clear();
   }
 
   requestLock() {
-    if (this.canvas?.requestPointerLock) {
-      const result = this.canvas.requestPointerLock();
-      if (result && typeof result.catch === 'function') result.catch(() => {});
-    }
+    if (!this.canvas?.requestPointerLock) return;
+    const result = this.canvas.requestPointerLock();
+    // Chrome returns a promise that rejects if the user just exited the lock.
+    if (result && typeof result.catch === 'function') result.catch(() => {});
   }
 
   releaseLock() {

@@ -1,5 +1,5 @@
-// Small maths helpers shared by the city generator, the camera rigs and later the
-// player and traffic. Kept dependency-free so anything can import them.
+// Small maths helpers shared by the city generator, the camera rigs, the player and the
+// traffic. Dependency-free on purpose: importing this can never drag in a system.
 
 export const TAU = Math.PI * 2;
 export const DEG = Math.PI / 180;
@@ -30,7 +30,7 @@ export function easeInOutCubic(t) {
   return x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2;
 }
 
-/** Frame-rate independent exponential approach: a is pulled towards b. */
+/** Frame-rate independent exponential approach: `a` is pulled towards `b`. */
 export function damp(a, b, lambda, dt) {
   return lerp(a, b, 1 - Math.exp(-lambda * dt));
 }
@@ -43,7 +43,7 @@ export function wrapAngle(angle) {
   return value;
 }
 
-/** The shortest signed rotation from a to b. */
+/** The shortest signed rotation from `a` to `b`. */
 export function angleDelta(a, b) {
   return wrapAngle(b - a);
 }
@@ -58,7 +58,7 @@ export function wrap(value, mod) {
   return result < 0 ? result + mod : result;
 }
 
-/** The shortest signed distance from a to b on a circle of circumference mod. */
+/** The shortest signed distance from `a` to `b` on a circle of circumference `mod`. */
 export function wrappedDelta(a, b, mod) {
   let delta = wrap(b - a, mod);
   if (delta > mod / 2) delta -= mod;
@@ -69,9 +69,16 @@ export function distance2D(ax, az, bx, bz) {
   return Math.hypot(bx - ax, bz - az);
 }
 
-/** Heading (three.js Y rotation) that points local -Z towards (tx, tz). */
+/** Heading (a three.js Y rotation) that points local -Z towards (tx, tz). */
 export function yawToward(x, z, tx, tz) {
   return Math.atan2(tx - x, tz - z);
+}
+
+// Integer hash in [0, 1): the lattice corners of the value noise below.
+function hash2D(ix, iz, seed) {
+  let h = Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263) ^ Math.imul(seed | 0, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 }
 
 /** Cheap deterministic 2D value noise in [-1, 1]. */
@@ -80,18 +87,12 @@ export function valueNoise2D(x, z, seed = 0) {
   const zi = Math.floor(z);
   const xf = x - xi;
   const zf = z - zi;
-  const hash = (ix, iz) => {
-    let h = Math.imul(ix, 374761393) ^ Math.imul(iz, 668265263) ^ Math.imul(seed | 0, 1442695041);
-    h = Math.imul(h ^ (h >>> 13), 1274126177);
-    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
-  };
+  // Smooth the lattice fractions so the field is continuous across cell borders.
   const u = xf * xf * (3 - 2 * xf);
   const v = zf * zf * (3 - 2 * zf);
-  const a = hash(xi, zi);
-  const b = hash(xi + 1, zi);
-  const c = hash(xi, zi + 1);
-  const d = hash(xi + 1, zi + 1);
-  return lerp(lerp(a, b, u), lerp(c, d, u), v) * 2 - 1;
+  const top = lerp(hash2D(xi, zi, seed), hash2D(xi + 1, zi, seed), u);
+  const bottom = lerp(hash2D(xi, zi + 1, seed), hash2D(xi + 1, zi + 1, seed), u);
+  return lerp(top, bottom, v) * 2 - 1;
 }
 
 /** Three octaves of value noise, still in [-1, 1]. */
@@ -104,14 +105,15 @@ export function fbm2D(x, z, octaves = 3, seed = 0) {
     sum += valueNoise2D(x * frequency, z * frequency, seed + i * 97) * amplitude;
     norm += amplitude;
     amplitude *= 0.5;
+    // Non-integer step keeps the octaves from lining up into visible grids.
     frequency *= 2.03;
   }
   return sum / norm;
 }
 
 /**
- * Samples a list of keyframes sorted by `at`, interpolating every numeric or
- * array-valued field. Used by the clock palette and the shot camera paths.
+ * Samples keyframes sorted by `at`, interpolating every numeric or array-valued field.
+ * Used by the clock palette and the shot camera paths.
  */
 export function sampleStops(stops, at, keys = null) {
   if (at <= stops[0].at) return stops[0];

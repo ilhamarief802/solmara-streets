@@ -1,12 +1,12 @@
 // The city plan: block grid, road graph, coastline, channel, bridges, the elevated
 // highway ring, district zoning and the queries later systems need (nearest lane,
-// nearest node, water/land tests). Pure data plus small helpers, no meshes: everything
+// nearest node, water/land tests). Pure data plus small helpers, no meshes: every
 // visual is built from this plan by the world modules.
 
 import { Random } from '../core/rng.js';
 import { districtIdAt, DISTRICT_IDS, DISTRICTS } from './districts.js';
 
-/** The block grid. One cell is a road centreline crossing; the block sits inside it. */
+/** The block grid. One cell is a road-centreline crossing; the block sits inside it. */
 export const GRID = {
   originX: -960,
   originZ: -960,
@@ -80,12 +80,14 @@ export const HIGHWAY = {
   ],
 };
 
-/** Land tests used by the plan, the terrain and every placement pass. */
+// ------------------------------------------------------------------ land tests
+// Every placement pass asks these before it raises anything, so they are the cheapest
+// possible shape: plain rectangle comparisons.
+
 export function isWaterAt(x, z) {
   if (z > WATER.seaSouthZ) return true;
   if (x < WATER.seaWestX) return true;
-  if (x > WATER.channelX0 && x < WATER.channelX1 && z > WATER.channelZ0) return true;
-  return false;
+  return x > WATER.channelX0 && x < WATER.channelX1 && z > WATER.channelZ0;
 }
 
 export function isHarbourAt(x, z) {
@@ -100,13 +102,15 @@ export function isAirstripAt(x, z) {
   return x > AIRSTRIP.x0 && x < AIRSTRIP.x1 && z > AIRSTRIP.z0 && z < AIRSTRIP.z1;
 }
 
-/** True when a point is on the sand itself, not the promenade north of it. */
+/** True on the sand itself, not the promenade north of it. */
 export function isSandAt(x, z) {
   return isBeachAt(x, z) && z > BEACH.z0 + 60 && !isWaterAt(x, z);
 }
 
+// ------------------------------------------------------------------ grid graph
 const nodeId = (i, j) => `n-${i}-${j}`;
 const edgeId = (i, j, axis) => `e-${axis}-${i}-${j}`;
+const indexKey = (i, j) => `${i},${j}`;
 
 /** The two rows where the grid crosses the channel on bridges. */
 const BRIDGE_ROWS = new Set([6, 11]);
@@ -119,8 +123,8 @@ function landNodes() {
       const x = GRID.originX + i * GRID.cell;
       const z = GRID.originZ + j * GRID.cell;
       if (isWaterAt(x, z)) continue;
-      // The far south-east corner is beach and the far north-west is marsh: keep the
-      // grid there, the districts simply raise nothing tall.
+      // The far south-east is beach and the far north-west is marsh: the grid still
+      // runs there, the districts simply raise nothing tall on it.
       nodes.push({
         id: nodeId(i, j),
         i,
@@ -129,13 +133,15 @@ function landNodes() {
         z,
         district: districtIdAt(x, z, false),
         signal: (i + j) % 3 === 0,
-        bridgehead: (j === 6 || j === 11) && (i === CHANNEL_COL || i === CHANNEL_COL + 1),
+        // A bridgehead is a node the channel edge may attach to.
+        bridgehead: BRIDGE_ROWS.has(j) && (i === CHANNEL_COL || i === CHANNEL_COL + 1),
       });
     }
   }
   return nodes;
 }
 
+/** One direction of travel: the centreline pushed half a lane to one side. */
 function laneFor(from, to, side, speed) {
   const dx = to.x - from.x;
   const dz = to.z - from.z;
@@ -154,12 +160,15 @@ function laneFor(from, to, side, speed) {
   };
 }
 
+// Downtown traffic crawls, the strip is a little quicker, everywhere else flows.
+const SPEEDS = { downtown: 12.5, neon: 10, default: 15 };
+
 function makeEdge(id, a, b, axis, options = {}) {
   const dx = b.x - a.x;
   const dz = b.z - a.z;
   const length = Math.hypot(dx, dz);
   const district = districtIdAt((a.x + b.x) / 2, (a.z + b.z) / 2, false);
-  const speed = district === 'downtown' ? 12.5 : district === 'neon' ? 10 : 15;
+  const speed = SPEEDS[district] ?? SPEEDS.default;
   return {
     id,
     axis,
@@ -180,24 +189,23 @@ function makeEdge(id, a, b, axis, options = {}) {
 
 function buildGraph(nodes) {
   const byIndex = new Map();
-  for (const node of nodes) byIndex.set(`${node.i},${node.j}`, node);
+  for (const node of nodes) byIndex.set(indexKey(node.i, node.j), node);
   const edges = [];
   const bridges = [];
 
-  const tryEdge = (a, b, axis, options = {}) => {
-    if (!a || !b) return null;
+  const tryEdge = (a, b, axis) => {
+    if (!a || !b) return;
     const mx = (a.x + b.x) / 2;
     const mz = (a.z + b.z) / 2;
     const crossesChannel = isWaterAt(mx, mz);
-    const bridge = crossesChannel && (a.bridgehead || b.bridgehead) && axis === 'h';
-    if (crossesChannel && !bridge) return null;
-    if (bridge) {
-      // Only the two marked bridge rows may jump the channel.
-      if (!(BRIDGE_ROWS.has(a.j) && BRIDGE_ROWS.has(b.j))) return null;
+    if (crossesChannel) {
+      // Only a marked bridgehead pair on a bridge row may jump the channel.
+      const spansBridgeRow = BRIDGE_ROWS.has(a.j) && BRIDGE_ROWS.has(b.j);
+      if (!(spansBridgeRow && (a.bridgehead || b.bridgehead) && axis === 'h')) return;
     }
-    const edge = makeEdge(edgeId(a.i, a.j, axis), a, b, axis, { ...options, bridge });
+    const edge = makeEdge(edgeId(a.i, a.j, axis), a, b, axis, { bridge: crossesChannel });
     edges.push(edge);
-    if (bridge) {
+    if (crossesChannel) {
       bridges.push({
         id: `bridge-${bridges.length + 1}`,
         edge: edge.id,
@@ -210,17 +218,16 @@ function buildGraph(nodes) {
         districtB: b.district,
       });
     }
-    return edge;
   };
 
   for (let j = 0; j < GRID.rows; j += 1) {
     for (let i = 0; i < GRID.cols - 1; i += 1) {
-      tryEdge(byIndex.get(`${i},${j}`), byIndex.get(`${i + 1},${j}`), 'h');
+      tryEdge(byIndex.get(indexKey(i, j)), byIndex.get(indexKey(i + 1, j)), 'h');
     }
   }
   for (let i = 0; i < GRID.cols; i += 1) {
     for (let j = 0; j < GRID.rows - 1; j += 1) {
-      tryEdge(byIndex.get(`${i},${j}`), byIndex.get(`${i},${j + 1}`), 'v');
+      tryEdge(byIndex.get(indexKey(i, j)), byIndex.get(indexKey(i, j + 1)), 'v');
     }
   }
   return { edges, bridges };
@@ -228,13 +235,12 @@ function buildGraph(nodes) {
 
 function buildBlocks(nodes) {
   const byIndex = new Map();
-  for (const node of nodes) byIndex.set(`${node.i},${node.j}`, node);
+  for (const node of nodes) byIndex.set(indexKey(node.i, node.j), node);
   const blocks = [];
-  const inner = GRID.blockWidth;
   for (let j = 0; j < GRID.rows - 1; j += 1) {
     for (let i = 0; i < GRID.cols - 1; i += 1) {
-      const a = byIndex.get(`${i},${j}`);
-      const b = byIndex.get(`${i + 1},${j + 1}`);
+      const a = byIndex.get(indexKey(i, j));
+      const b = byIndex.get(indexKey(i + 1, j + 1));
       if (!a || !b) continue;
       const x0 = a.x + GRID.kerbInset;
       const z0 = a.z + GRID.kerbInset;
@@ -245,7 +251,8 @@ function buildBlocks(nodes) {
       const cz = (z0 + z1) / 2;
       if (isWaterAt(cx, cz)) continue;
       const district = districtIdAt(cx, cz, false);
-      const park = district !== 'downtown' && district !== 'harbour' && district !== 'airstrip' && (i * 7 + j * 11) % 13 === 0;
+      // A deterministic sprinkle of parks: no downtown, no working waterfront.
+      const parkable = district !== 'downtown' && district !== 'harbour' && district !== 'airstrip';
       blocks.push({
         id: `b-${i}-${j}`,
         i,
@@ -259,9 +266,14 @@ function buildBlocks(nodes) {
         cz: Math.round(cz),
         width: Math.round(x1 - x0),
         depth: Math.round(z1 - z0),
-        park,
-        inner: { x0: Math.round(x0 + GRID.sidewalk), z0: Math.round(z0 + GRID.sidewalk), x1: Math.round(x1 - GRID.sidewalk), z1: Math.round(z1 - GRID.sidewalk) },
-        innerWidth: inner - GRID.sidewalk * 2,
+        park: parkable && (i * 7 + j * 11) % 13 === 0,
+        inner: {
+          x0: Math.round(x0 + GRID.sidewalk),
+          z0: Math.round(z0 + GRID.sidewalk),
+          x1: Math.round(x1 - GRID.sidewalk),
+          z1: Math.round(z1 - GRID.sidewalk),
+        },
+        innerWidth: GRID.blockWidth - GRID.sidewalk * 2,
       });
     }
   }
@@ -350,6 +362,25 @@ const SPAWNS = [
   },
 ];
 
+/** Which blocks get a handcrafted landmark instead of procedural buildings. */
+function pickLandmarkBlocks(plan) {
+  const picks = {};
+  const taken = new Set();
+  const take = (key, predicate) => {
+    const block = plan.blocks.find((candidate) => predicate(candidate) && !taken.has(candidate.id));
+    if (!block) return;
+    picks[key] = block.id;
+    taken.add(block.id);
+  };
+  take('tower', (block) => block.district === 'downtown' && block.cx > 60 && block.cx < 260 && block.cz > -260 && block.cz < -40);
+  take('stadium', (block) => block.district === 'verano' && block.cx > 520 && block.cz > 260);
+  take('market', (block) => block.district === 'verano' && block.cx > 200 && block.cx < 420 && block.cz > 200 && block.cz < 360);
+  take('pier', (block) => block.district === 'beach' && block.cz > 380);
+  take('cranes', (block) => block.district === 'harbour' && block.cz > 380 && block.cx < -560);
+  take('hangars', (block) => block.district === 'airstrip');
+  return picks;
+}
+
 /**
  * Creates the whole plan. Deterministic for a given seed; the default seed is the
  * city's fixed one, and shots may pass another only to vary their camera, never the
@@ -362,8 +393,6 @@ export function createCityPlan(seed = 'solmara-01') {
   const blocks = buildBlocks(nodes);
   const highway = buildHighway();
 
-  const nodeById = new Map(nodes.map((node) => [node.id, node]));
-  const edgeById = new Map(edges.map((edge) => [edge.id, edge]));
   const lanes = [];
   for (const edge of edges) {
     edge.lanes.forEach((lane, index) => {
@@ -371,9 +400,9 @@ export function createCityPlan(seed = 'solmara-01') {
     });
   }
 
-  const districts = {};
+  const districtCounts = {};
   for (const id of DISTRICT_IDS) {
-    districts[id] = blocks.filter((block) => block.district === id).length;
+    districtCounts[id] = blocks.filter((block) => block.district === id).length;
   }
 
   const plan = {
@@ -385,13 +414,13 @@ export function createCityPlan(seed = 'solmara-01') {
     airstrip: AIRSTRIP,
     highway,
     nodes,
-    nodeById,
+    nodeById: new Map(nodes.map((node) => [node.id, node])),
     edges,
-    edgeById,
+    edgeById: new Map(edges.map((edge) => [edge.id, edge])),
     lanes,
     blocks,
     bridges,
-    districts,
+    districts: districtCounts,
     spawns: SPAWNS.map((spawn) => ({ ...spawn })),
     random,
     stats: {
@@ -405,24 +434,11 @@ export function createCityPlan(seed = 'solmara-01') {
   };
 
   plan.landmarkBlocks = pickLandmarkBlocks(plan);
-  plan.spawns = plan.spawns.map((spawn) => ({ ...spawn, districtName: DISTRICTS[spawn.district]?.name ?? spawn.district }));
+  plan.spawns = plan.spawns.map((spawn) => ({
+    ...spawn,
+    districtName: DISTRICTS[spawn.district]?.name ?? spawn.district,
+  }));
   return plan;
-}
-
-/** Which blocks get a handcrafted landmark instead of procedural buildings. */
-function pickLandmarkBlocks(plan) {
-  const picks = {};
-  const take = (key, predicate) => {
-    const block = plan.blocks.find((candidate) => predicate(candidate) && !Object.values(picks).includes(candidate.id));
-    if (block) picks[key] = block.id;
-  };
-  take('tower', (block) => block.district === 'downtown' && block.cx > 60 && block.cx < 260 && block.cz > -260 && block.cz < -40);
-  take('stadium', (block) => block.district === 'verano' && block.cx > 520 && block.cz > 260);
-  take('market', (block) => block.district === 'verano' && block.cx > 200 && block.cx < 420 && block.cz > 200 && block.cz < 360);
-  take('pier', (block) => block.district === 'beach' && block.cz > 380);
-  take('cranes', (block) => block.district === 'harbour' && block.cz > 380 && block.cx < -560);
-  take('hangars', (block) => block.district === 'airstrip');
-  return picks;
 }
 
 /** True when a position is inside the land bounds of the playable city. */
@@ -451,16 +467,15 @@ export function nearestLanePoint(plan, x, z, maxDistance = Infinity) {
   return best;
 }
 
-/** Nearest road node to (x, z): used for junctions, signals and later patrol routes. */
+/** Nearest road node to (x, z): used for junctions, signals and patrol routes. */
 export function nearestRoadNode(plan, x, z) {
   let best = null;
   let bestDistance = Infinity;
   for (const node of plan.nodes) {
     const distance = Math.hypot(x - node.x, z - node.z);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = node;
-    }
+    if (distance >= bestDistance) continue;
+    bestDistance = distance;
+    best = node;
   }
   return best ? { node: best, distance: bestDistance } : null;
 }
@@ -478,8 +493,8 @@ export function nodesWithin(plan, x, z, radius) {
 }
 
 /** Edges connected to a node. */
-export function edgesAt(plan, nodeId) {
-  return plan.edges.filter((edge) => edge.a === nodeId || edge.b === nodeId);
+export function edgesAt(plan, nodeIdToFind) {
+  return plan.edges.filter((edge) => edge.a === nodeIdToFind || edge.b === nodeIdToFind);
 }
 
 /** The district a point belongs to, with the plan's default fallbacks. */

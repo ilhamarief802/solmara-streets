@@ -11,12 +11,18 @@ const QUALITY_PRESETS = {
   high: { pixelRatio: 1.6, renderScale: 1, shadows: true, skySegments: 32, propDensity: 1, drawDistance: 3000 },
 };
 
+const MAX_TRAFFIC = 48;
+const MAX_PEDESTRIANS = 48;
+const SENSITIVITY = { min: 0.55, max: 2.4 };
+const DRAW_DISTANCE = { min: 1200, max: 4500 };
+
 export class Settings {
   constructor(search = '') {
     const params = new URLSearchParams(search);
     const requested = (params.get('quality') ?? 'medium').toLowerCase();
     this.quality = QUALITY_PRESETS[requested] ? requested : 'medium';
     const preset = QUALITY_PRESETS[this.quality];
+
     this.pixelRatioCap = preset.pixelRatio;
     this.renderScale = preset.renderScale;
     this.shadows = preset.shadows && params.get('shadows') !== '0';
@@ -25,9 +31,9 @@ export class Settings {
     this.skySegments = preset.skySegments;
     this.propDensity = clamp(Number(params.get('props')) || preset.propDensity, 0.2, 1.4);
     this.drawDistance = preset.drawDistance;
-    this.trafficCount = clamp(Number(params.get('traffic')) || 30, 0, 48);
-    this.pedestrianCount = clamp(Number(params.get('peds')) || 32, 0, 48);
-    this.cameraSensitivity = clamp(Number(params.get('sens')) || 1, 0.55, 2.4);
+    this.trafficCount = clamp(Number(params.get('traffic')) || 30, 0, MAX_TRAFFIC);
+    this.pedestrianCount = clamp(Number(params.get('peds')) || 32, 0, MAX_PEDESTRIANS);
+    this.cameraSensitivity = clamp(Number(params.get('sens')) || 1, SENSITIVITY.min, SENSITIVITY.max);
     this.muted = params.get('mute') === '1';
     this.showFps = params.get('fps') === '1';
     this.fov = clamp(Number(params.get('fov')) || 62, 45, 90);
@@ -40,51 +46,38 @@ export class Settings {
   }
 
   /**
-   * Applies a stored knobs record. Returns true when at least one value changed; main.js
-   * uses that to resize the crowd and rebuild the renderer only when it must.
+   * Applies a stored knobs record. Returns true when at least one value changed; the
+   * settings screen uses that to decide whether a rebuild is needed.
    */
   apply(values) {
     if (!values || typeof values !== 'object') return false;
     let changed = false;
-    if (Number.isFinite(Number(values.drawDistance))) {
-      const next = clamp(Number(values.drawDistance), 1200, 4500);
-      if (next !== this.drawDistance) {
-        this.drawDistance = next;
-        changed = true;
-      }
-    }
-    if (Number.isFinite(Number(values.traffic))) {
-      const next = Math.round(clamp(Number(values.traffic), 0, 48));
-      if (next !== this.trafficCount) {
-        this.trafficCount = next;
-        changed = true;
-      }
-    }
-    if (Number.isFinite(Number(values.pedestrians))) {
-      const next = Math.round(clamp(Number(values.pedestrians), 0, 48));
-      if (next !== this.pedestrianCount) {
-        this.pedestrianCount = next;
-        changed = true;
-      }
-    }
+
+    /** Stores a clamped numeric knob; notes a change when the value moves. */
+    const setIfChanged = (key, raw, min, max, round = false) => {
+      const value = Number(raw);
+      if (!Number.isFinite(value)) return;
+      const next = round ? Math.round(clamp(value, min, max)) : clamp(value, min, max);
+      if (next === this[key]) return;
+      this[key] = next;
+      changed = true;
+    };
+
+    setIfChanged('drawDistance', values.drawDistance, DRAW_DISTANCE.min, DRAW_DISTANCE.max);
+    setIfChanged('trafficCount', values.traffic, 0, MAX_TRAFFIC, true);
+    setIfChanged('pedestrianCount', values.pedestrians, 0, MAX_PEDESTRIANS, true);
+    setIfChanged('cameraSensitivity', values.sensitivity, SENSITIVITY.min, SENSITIVITY.max);
+
     if (values.shadows === 'off' || values.shadows === 'low') {
-      const next = values.shadows;
-      if (next !== this.shadowQuality) {
-        this.shadowQuality = next;
-        this.shadows = next !== 'off';
+      if (values.shadows !== this.shadowQuality) {
+        this.shadowQuality = values.shadows;
+        this.shadows = values.shadows !== 'off';
         changed = true;
       }
     }
     if (typeof values.post === 'boolean' && values.post !== this.postProcessing) {
       this.postProcessing = values.post;
       changed = true;
-    }
-    if (Number.isFinite(Number(values.sensitivity))) {
-      const next = clamp(Number(values.sensitivity), 0.55, 2.4);
-      if (next !== this.cameraSensitivity) {
-        this.cameraSensitivity = next;
-        changed = true;
-      }
     }
     if (typeof values.mute === 'boolean' && values.mute !== this.muted) {
       this.muted = values.mute;

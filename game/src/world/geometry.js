@@ -7,7 +7,7 @@
 // Materials are MeshLambert: cheap, fog-aware, and with an emissive map for the lit
 // windows the clock turns up after dusk.
 
-/** sRGB hex to a linear vertex-colour triple, optionally tinted. */
+/** sRGB hex to a linear vertex-colour triple, optionally scaled. */
 export function colorTriple(hex, tint = 1) {
   // THREE.Color converts an sRGB hex to the linear working space on construction, so
   // converting again here would darken every surface twice.
@@ -22,6 +22,17 @@ export function tintTriple(hex, random, amount = 0.1) {
 
 const _v = new THREE.Vector3();
 const _n = new THREE.Vector3();
+
+/** Maps a four-corner list of [u, v] pairs through a tile scale. */
+function scaledUvs(corners, ux, uy) {
+  return corners.map(([u, v]) => [u * ux, v * uy]);
+}
+
+/** `uvScale` is [horizontal, vertical] metres per tile, or one number for both. */
+function uvPair(value) {
+  if (Array.isArray(value)) return value;
+  return value === undefined ? [8, 8] : [value, value];
+}
 
 export class MeshBuilder {
   constructor(name = 'builder') {
@@ -77,7 +88,7 @@ export class MeshBuilder {
    */
   box(cx, y, cz, width, height, depth, color, opts = {}) {
     const rotY = opts.rotY ?? 0;
-    const uvScale = opts.uvScale ?? [8, 8];
+    const [uvX, uvY] = uvPair(opts.uvScale);
     const topColor = opts.topColor ?? color;
     const w = width / 2;
     const d = depth / 2;
@@ -85,56 +96,50 @@ export class MeshBuilder {
     const cos = Math.cos(rotY);
     const sin = Math.sin(rotY);
     const point = (x, yy, z) => [cx + x * cos - z * sin, y + yy, cz + x * sin + z * cos];
-    const ux = 1 / uvScale[0];
-    const uy = 1 / uvScale[1];
+    const ux = 1 / uvX;
+    const uy = 1 / uvY;
 
     // +Z and -Z faces.
-    this.quad(point(-w, 0, d), point(w, 0, d), point(w, h, d), point(-w, h, d), [sin, 0, cos], color, [
-      [cx - w, y],
-      [cx + w, y],
-      [cx + w, y + h],
-      [cx - w, y + h],
-    ].map(([u, v]) => [u * ux, v * uy]));
-    this.quad(point(w, 0, -d), point(-w, 0, -d), point(-w, h, -d), point(w, h, -d), [-sin, 0, -cos], color, [
-      [cx + w, y],
-      [cx - w, y],
-      [cx - w, y + h],
-      [cx + w, y + h],
-    ].map(([u, v]) => [u * ux, v * uy]));
+    this.quad(
+      point(-w, 0, d), point(w, 0, d), point(w, h, d), point(-w, h, d),
+      [sin, 0, cos], color,
+      scaledUvs([[cx - w, y], [cx + w, y], [cx + w, y + h], [cx - w, y + h]], ux, uy),
+    );
+    this.quad(
+      point(w, 0, -d), point(-w, 0, -d), point(-w, h, -d), point(w, h, -d),
+      [-sin, 0, -cos], color,
+      scaledUvs([[cx + w, y], [cx - w, y], [cx - w, y + h], [cx + w, y + h]], ux, uy),
+    );
     // +X and -X faces.
-    this.quad(point(w, 0, d), point(w, 0, -d), point(w, h, -d), point(w, h, d), [cos, 0, sin], color, [
-      [cz + d, y],
-      [cz - d, y],
-      [cz - d, y + h],
-      [cz + d, y + h],
-    ].map(([u, v]) => [u * ux, v * uy]));
-    this.quad(point(-w, 0, -d), point(-w, 0, d), point(-w, h, d), point(-w, h, -d), [-cos, 0, -sin], color, [
-      [cz - d, y],
-      [cz + d, y],
-      [cz + d, y + h],
-      [cz - d, y + h],
-    ].map(([u, v]) => [u * ux, v * uy]));
-    // Top and, if asked for, bottom.
-    this.quad(point(-w, h, d), point(w, h, d), point(w, h, -d), point(-w, h, -d), [0, 1, 0], topColor, [
-      [cx - w, cz + d],
-      [cx + w, cz + d],
-      [cx + w, cz - d],
-      [cx - w, cz - d],
-    ].map(([u, v]) => [u * ux, v * ux]));
+    this.quad(
+      point(w, 0, d), point(w, 0, -d), point(w, h, -d), point(w, h, d),
+      [cos, 0, sin], color,
+      scaledUvs([[cz + d, y], [cz - d, y], [cz - d, y + h], [cz + d, y + h]], ux, uy),
+    );
+    this.quad(
+      point(-w, 0, -d), point(-w, 0, d), point(-w, h, d), point(-w, h, -d),
+      [-cos, 0, -sin], color,
+      scaledUvs([[cz - d, y], [cz + d, y], [cz + d, y + h], [cz - d, y + h]], ux, uy),
+    );
+    // The roof, laid out in world metres so its pattern lines up with the walls.
+    this.quad(
+      point(-w, h, d), point(w, h, d), point(w, h, -d), point(-w, h, -d),
+      [0, 1, 0], topColor,
+      scaledUvs([[cx - w, cz + d], [cx + w, cz + d], [cx + w, cz - d], [cx - w, cz - d]], ux, ux),
+    );
     if (opts.bottom) {
-      this.quad(point(-w, 0, -d), point(w, 0, -d), point(w, 0, d), point(-w, 0, d), [0, -1, 0], color, [
-        [cx - w, cz - d],
-        [cx + w, cz - d],
-        [cx + w, cz + d],
-        [cx - w, cz + d],
-      ].map(([u, v]) => [u * ux, v * ux]));
+      this.quad(
+        point(-w, 0, -d), point(w, 0, -d), point(w, 0, d), point(-w, 0, d),
+        [0, -1, 0], color,
+        scaledUvs([[cx - w, cz - d], [cx + w, cz - d], [cx + w, cz + d], [cx - w, cz + d]], ux, ux),
+      );
     }
     return this;
   }
 
-  /** A box with a smaller top footprint: the first tier of a setback tower. */
+  /** A box whose top footprint is scaled: one tier of a setback tower. */
   taperedBox(cx, y, cz, width, depth, height, topScale, color, opts = {}) {
-    const uvScale = opts.uvScale ?? [8, 8];
+    const [uvX, uvY] = uvPair(opts.uvScale);
     const rotY = opts.rotY ?? 0;
     const cos = Math.cos(rotY);
     const sin = Math.sin(rotY);
@@ -143,35 +148,30 @@ export class MeshBuilder {
     const tw = w * topScale;
     const td = d * topScale;
     const point = (x, yy, z) => [cx + x * cos - z * sin, y + yy, cz + x * sin + z * cos];
-    const ux = 1 / uvScale[0];
-    const uy = 1 / uvScale[1];
+    const ux = 1 / uvX;
+    const uy = 1 / uvY;
     const topColor = opts.topColor ?? color;
+
+    // Each side runs from the wide base pair to the narrow top pair.
     const sides = [
       [[-w, 0, d], [w, 0, d], [tw, height, td], [-tw, height, td], [sin, 0, cos]],
       [[w, 0, -d], [-w, 0, -d], [-tw, height, -td], [tw, height, -td], [-sin, 0, -cos]],
       [[w, 0, d], [w, 0, -d], [tw, height, -td], [tw, height, td], [cos, 0, sin]],
       [[-w, 0, -d], [-w, 0, d], [-tw, height, td], [-tw, height, -td], [-cos, 0, -sin]],
     ];
+    const sideUvs = [[0, 0], [width * ux, 0], [width * ux * topScale, height * uy], [0, height * uy]];
     for (const [a, b, c, d2, normal] of sides) {
-      const pa = point(...a);
-      const pb = point(...b);
-      const pc = point(...c);
-      const pd = point(...d2);
-      this.quad(pa, pb, pc, pd, normal, color, [
-        [0, 0],
-        [width * ux, 0],
-        [width * ux * topScale, height * uy],
-        [0, height * uy],
-      ]);
+      this.quad(point(...a), point(...b), point(...c), point(...d2), normal, color, sideUvs);
     }
     this.quad(
-      point(-tw, height, td),
-      point(tw, height, td),
-      point(tw, height, -td),
-      point(-tw, height, -td),
-      [0, 1, 0],
-      topColor,
-      [[0, 0], [width * topScale * ux, 0], [width * topScale * ux, depth * topScale * ux], [0, depth * topScale * ux]],
+      point(-tw, height, td), point(tw, height, td), point(tw, height, -td), point(-tw, height, -td),
+      [0, 1, 0], topColor,
+      [
+        [0, 0],
+        [width * topScale * ux, 0],
+        [width * topScale * ux, depth * topScale * ux],
+        [0, depth * topScale * ux],
+      ],
     );
     return this;
   }
@@ -204,23 +204,13 @@ export class MeshBuilder {
     const w = width / 2;
     const h = height / 2;
     const point = (x, y) => [cx + x * cos, cy + y, cz + x * sin];
-    const normal = [sin, 0, cos];
     const repeatX = opts.repeatX ?? 1;
     const repeatY = opts.repeatY ?? 1;
-    const twoSided = opts.twoSided;
-    this.quad(point(-w, -h), point(w, -h), point(w, h), point(-w, h), normal, color, [
-      [0, 0],
-      [repeatX, 0],
-      [repeatX, repeatY],
-      [0, repeatY],
-    ]);
-    if (twoSided) {
-      this.quad(point(w, -h), point(-w, -h), point(-w, h), point(w, h), [-sin, 0, -cos], color, [
-        [0, 0],
-        [repeatX, 0],
-        [repeatX, repeatY],
-        [0, repeatY],
-      ]);
+    const uvs = [[0, 0], [repeatX, 0], [repeatX, repeatY], [0, repeatY]];
+
+    this.quad(point(-w, -h), point(w, -h), point(w, h), point(-w, h), [sin, 0, cos], color, uvs);
+    if (opts.twoSided) {
+      this.quad(point(w, -h), point(-w, -h), point(-w, h), point(w, h), [-sin, 0, -cos], color, uvs);
     }
     return this;
   }
@@ -231,10 +221,9 @@ export class MeshBuilder {
     const dz = bz - az;
     const length = Math.hypot(dx, dz);
     if (length < 0.001) return this;
-    const rotY = Math.atan2(dx, dz);
     return this.box((ax + bx) / 2, bottomY, (az + bz) / 2, width, height, length, color, {
       ...opts,
-      rotY,
+      rotY: Math.atan2(dx, dz),
       uvScale: opts.uvScale ?? [8, 8],
     });
   }
@@ -247,6 +236,8 @@ export class MeshBuilder {
     const sides = Math.max(3, segments);
     const ux = 1 / uvScale;
     const uy = 1 / uvScale;
+    const arc = (Math.PI * 2 * radius) / sides;
+
     for (let i = 0; i < sides; i += 1) {
       const a0 = (i / sides) * Math.PI * 2;
       const a1 = ((i + 1) / sides) * Math.PI * 2;
@@ -254,9 +245,9 @@ export class MeshBuilder {
       const z0 = Math.sin(a0);
       const x1 = Math.cos(a1);
       const z1 = Math.sin(a1);
+      // The normal points out of the middle of the segment.
       const nx = Math.cos((a0 + a1) / 2);
       const nz = Math.sin((a0 + a1) / 2);
-      const arc = (Math.PI * 2 * radius) / sides;
       this.quad(
         [cx + x0 * radius, y, cz + z0 * radius],
         [cx + x1 * radius, y, cz + z1 * radius],
@@ -264,9 +255,15 @@ export class MeshBuilder {
         [cx + x0 * topRadius, y + height, cz + z0 * topRadius],
         [nx, 0, nz],
         color,
-        [[i * arc * ux, 0], [(i + 1) * arc * ux, 0], [(i + 1) * arc * ux, height * uy], [i * arc * ux, height * uy]],
+        [
+          [i * arc * ux, 0],
+          [(i + 1) * arc * ux, 0],
+          [(i + 1) * arc * ux, height * uy],
+          [i * arc * ux, height * uy],
+        ],
       );
     }
+
     if (cap && topRadius > 0.01) {
       for (let i = 0; i < sides; i += 1) {
         const a0 = (i / sides) * Math.PI * 2;
@@ -335,6 +332,7 @@ export class MeshBuilder {
     geometry.computeBoundingSphere();
     const mesh = new THREE.Mesh(geometry, material);
     mesh.name = name;
+    // City geometry never moves after generation; skip the per-frame matrix update.
     mesh.matrixAutoUpdate = false;
     mesh.updateMatrix();
     mesh.castShadow = false;
@@ -343,7 +341,7 @@ export class MeshBuilder {
     return mesh;
   }
 
-  /** Finalizes and adds to a group; returns the group for chaining. */
+  /** Finalizes and adds to a group; returns the mesh (or null) for chaining. */
   attach(group, material, name = this.name) {
     const mesh = this.finalize(material, name);
     if (mesh) group.add(mesh);
@@ -398,4 +396,5 @@ export function flatMaterial(color = 0xffffff, options = {}) {
   });
 }
 
+// Shared scratch vectors for the callers that project a point per frame.
 export { _v as scratchVector, _n as scratchNormal };
