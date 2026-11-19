@@ -1,9 +1,12 @@
-// Procedural buildings. Each block is split into lots, and each lot raises a building
-// whose height, footprint, setback, roof clutter and facade come from its district record
-// and the plan's seed. Downtown leans on curtain-wall towers with tapering crowns, Verano
-// on low stucco walk-ups with awnings, the Neon Strip on dark boxes wearing signs, the
-// harbour on long warehouses. Every wall is merged into one mesh per facade variant; the
-// lit-window emissive maps are collected so the clock can turn them on at dusk.
+// Procedural buildings. Each block is split into lots, and each lot raises a building whose
+// height, footprint, setback, roof clutter and facade come from its district record and the
+// plan's seed. Downtown leans on curtain-wall towers with tapering crowns, Verano on low
+// stucco walk-ups with awnings, the Neon Strip on dark boxes wearing signs, the harbour on
+// long warehouses. Every wall is merged into one mesh per facade variant; the lit-window
+// emissive maps are collected so the clock can turn them on at dusk.
+//
+// Every random draw here happens in a fixed order, whether or not the result is used: the
+// district layout has to stay identical from one reload to the next.
 
 import { MeshBuilder, cityMaterial, colorTriple, tintTriple } from './geometry.js';
 import { Random } from '../core/rng.js';
@@ -47,11 +50,13 @@ function districtHeight(district, cx, cz, random) {
   const falloff = clamp(1.15 - distance / 900, 0.42, 1);
   // Biased towards the low end, so a skyline is mostly mid-rise with a few spikes.
   const roll = random.float() ** 1.7;
+  // Downtown keeps its falloff; everywhere else flattens it towards one.
   const reach = district.id === 'downtown' ? falloff : lerp(0.65, 1, falloff);
   const height = lerp(district.height[0], district.height[1], roll) * reach;
   return clamp(height, district.height[0] * 0.7, district.height[1]);
 }
 
+/** Rooftop clutter: plant boxes, a parapet, sometimes a tank, a mast or a sign frame. */
 function roofPlant(builder, random, cx, cz, width, depth, top, districtId) {
   const acColor = colorTriple(0x8f9497);
   for (let i = 0, count = random.int(1, districtId === 'downtown' ? 4 : 2); i < count; i += 1) {
@@ -149,6 +154,7 @@ export function buildBuildings(plan, textures, colliders, options = {}) {
     if (existing) return existing;
 
     const pair = glass ? textures.glassWall(districtId, slot) : textures.facade(districtId, slot);
+    // The emissive map starts dark; world.update lifts the intensity after dusk.
     const material = cityMaterial(pair, { emissive: glass ? 0xbfe0ff : 0xffc07a, emissiveIntensity: 0 });
     material.name = `wall-${key}`;
     return register({ key, builder: new MeshBuilder(`walls-${key}`), material, pair });
@@ -186,6 +192,7 @@ export function buildBuildings(plan, textures, colliders, options = {}) {
   for (const block of plan.blocks) {
     if (block.park) continue;
     if (block.district === 'airstrip') continue;
+    // A landmark block is raised by landmarks.js instead.
     if (landmarks.has(block.id)) continue;
     // The open sand south of the boardwalk stays open.
     if (block.district === 'beach' && block.cz > BEACH.boardwalkZ - 20) continue;
@@ -255,11 +262,14 @@ export function buildBuildings(plan, textures, colliders, options = {}) {
       let topWidth = width;
       let topDepth = depth;
       let top = height;
-      // `tiers` only ever decides "give this one a crown"; it is drawn unconditionally
-      // for tall lots so the random stream stays in step with how the city was laid out.
+      // `tiers` only ever decides "give this one a crown"; it is drawn unconditionally for
+      // tall lots so the random stream stays in step with how the city was laid out.
       const tiers = height > 60 ? random.int(1, 2) : 0;
       if (tiers === 0) {
-        builder.box(cx, 0, cz, width, height, depth, tone, { uvScale, topColor: tintTriple(ROOF_TOP.plain, random, 0.05) });
+        builder.box(cx, 0, cz, width, height, depth, tone, {
+          uvScale,
+          topColor: tintTriple(ROOF_TOP.plain, random, 0.05),
+        });
       } else {
         const lowerHeight = height * random.range(0.62, 0.8);
         builder.box(cx, 0, cz, width, lowerHeight, depth, tone, { uvScale, topColor: colorTriple(ROOF_TOP.plain) });

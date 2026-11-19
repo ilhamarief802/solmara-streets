@@ -1,8 +1,8 @@
 // Assembles Solmara. Given one seed, this builds the plan, paints the textures, raises the
-// terrain, streets, highway, buildings, landmarks, props and sea, registers every
-// collider, and returns the single object the rest of the game builds on: the road graph,
-// named spawns, district lookup, collision and ground queries, minimap geometry, and the
-// update hook that turns window lights and street lamps on at dusk.
+// terrain, streets, highway, buildings, landmarks, props and sea, registers every collider,
+// and returns the single object the rest of the game builds on: the road graph, named
+// spawns, district lookup, collision and ground queries, minimap geometry, and the update
+// hook that turns window lights and street lamps on at dusk.
 
 import {
   createCityPlan,
@@ -44,6 +44,8 @@ export function createWorld(options = {}) {
   const group = new THREE.Group();
   group.name = 'solmara';
 
+  // The build order matters: collisions exist before the props that register with them, and
+  // the walk layer comes last so a kerbside space is never placed inside a lamp post.
   onStage('painting the surfaces');
   const terrain = buildTerrain(plan, textures, { detail: settings.propDensity });
   group.add(terrain.group);
@@ -68,6 +70,7 @@ export function createWorld(options = {}) {
   const props = buildProps(plan, textures, colliders, {
     // Half the furniture is enough to read as a street on a software rasteriser.
     detail: lite ? Math.min(settings.propDensity, 0.5) : settings.propDensity,
+    // The vehicle system places the drivable kerbside cars; world props must not double them.
     parkedCars: false,
   });
   group.add(props.group);
@@ -76,8 +79,6 @@ export function createWorld(options = {}) {
   const water = createWater(plan);
   group.add(water.mesh);
 
-  // The pedestrian and parking layer sits on top of the colliders, so a kerbside space is
-  // never placed inside a lamp post, a palm or a wall.
   onStage('marking the pavements');
   const walk = createWalkNetwork(plan, colliders);
 
@@ -94,6 +95,7 @@ export function createWorld(options = {}) {
   const stadium = landmarkBlock('stadium');
   const minimap = {
     bounds: { ...LAND_BOUNDS },
+    // Three sea rectangles and one channel: the minimap only needs the outlines.
     water: [
       { x0: -1300, z0: -1100, x1: WATER.seaWestX, z1: 900, kind: 'sea' },
       { x0: -1300, z0: WATER.seaSouthZ, x1: 1400, z1: 1000, kind: 'sea' },
@@ -123,6 +125,7 @@ export function createWorld(options = {}) {
       kind: bridge.kind,
     })),
     highway: plan.highway.segments.map((segment) => ({ x0: segment.ax, z0: segment.az, x1: segment.bx, z1: segment.bz })),
+    // The fallbacks only matter if a landmark block failed to be picked.
     landmarks: [
       { id: 'spire', x: tower?.cx ?? 180, z: tower?.cz ?? -140, label: 'Solmara Spire' },
       { id: 'stadium', x: stadium?.cx ?? 600, z: stadium?.cz ?? 300, label: 'Verano Arena' },
@@ -178,8 +181,8 @@ export function createWorld(options = {}) {
     buildMs: Math.round(performance.now() - started),
   };
 
-  // The play state the HUD and the systems read. They write it, nothing here simulates:
-  // one shared shape, and no imports back up the stack.
+  // The play state the HUD and the systems read. They write it, nothing here simulates: one
+  // shared shape, and no imports back up the stack.
   const state = {
     mode: 'foot',
     vehicle: null,

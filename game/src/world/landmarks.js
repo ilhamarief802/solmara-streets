@@ -1,9 +1,8 @@
-// Handcrafted landmarks, one per district signature: the Solmara Spire downtown, the
-// Verano Arena stadium, the beach pier with its yachts, the harbour's gantry cranes and
-// container stacks, the two channel bridges (an old stone arch and a steel truss), and
-// the marsh airstrip's hangars, control tower and apron. They are built from the same
-// primitives as everything else, then merged by material, so eight landmarks cost a
-// handful of draw calls.
+// Handcrafted landmarks, one per district signature: the Solmara Spire downtown, the Verano
+// Arena stadium, the beach pier with its yachts, the harbour's gantry cranes and container
+// stacks, the two channel bridges (an old stone arch and a steel truss), and the marsh
+// airstrip's hangars, control tower and apron. They are built from the same primitives as
+// everything else, then merged by material, so eight landmarks cost a handful of draw calls.
 
 import { MeshBuilder, cityMaterial, colorTriple, glowMaterial } from './geometry.js';
 import { Random } from '../core/rng.js';
@@ -109,6 +108,7 @@ function buildStadium(group, plan, textures, colliders, block) {
   ];
   for (const stand of stands) {
     for (let tier = 0; tier < 3; tier += 1) {
+      // Each terrace steps back as it rises, so the bowl reads from the pitch.
       seats.box(
         cx + stand.dx,
         1.6 + tier * 1.8,
@@ -224,6 +224,7 @@ function buildPier(group, plan, textures, colliders) {
   piles.box(x - width / 2, 0.38, startZ + 1, 2.2, 3, 2.2, colorTriple(0x6a5540), { uvScale: 4 });
   piles.box(x + width / 2, 0.38, startZ + 1, 2.2, 3, 2.2, colorTriple(0x6a5540), { uvScale: 4 });
 
+  // The deck is walkable: a platform at deck height over the water.
   colliders.addPlatform(x - width / 2, startZ, x + width / 2, endZ, 0.38, 'pier');
 
   return {
@@ -255,7 +256,9 @@ function buildCranes(group, plan, textures, colliders, block, random) {
     // Four legs with foot braces.
     for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
       steel.box(x + sx * legInsetX, quayY, z + sz * legInsetZ, 1.5, legHeight, 1.5, colorTriple(0xd8b24a), { uvScale: 5 });
-      steel.box(x + sx * legInsetX * 0.55, quayY, z + sz * legInsetZ * 0.55, 1.1, 1.1, 1.1, colorTriple(0x8d7430), { uvScale: 3 });
+      steel.box(x + sx * legInsetX * 0.55, quayY, z + sz * legInsetZ * 0.55, 1.1, 1.1, 1.1, colorTriple(0x8d7430), {
+        uvScale: 3,
+      });
       colliders.addBoxAt(x + sx * legInsetX, z + sz * legInsetZ, 0.9, 0.9, legHeight, 'prop', { landmark: 'crane-leg' });
     }
 
@@ -283,7 +286,9 @@ function buildCranes(group, plan, textures, colliders, block, random) {
       const z = HARBOUR.quayZ - 92 + row * 13;
       const levels = random.int(1, 3);
       for (let level = 0; level < levels; level += 1) {
-        containers.box(x, quayY + level * 2.7, z, 12, 2.6, 2.5, colorTriple(random.pick(containerColors), 0.9), { uvScale: 4 });
+        containers.box(x, quayY + level * 2.7, z, 12, 2.6, 2.5, colorTriple(random.pick(containerColors), 0.9), {
+          uvScale: 4,
+        });
         containers.box(x, quayY + level * 2.7 + 2.4, z, 12.2, 0.2, 2.7, colorTriple(0x2f3335), { uvScale: 4 });
       }
       colliders.addBox(x - 6, z - 1.25, x + 6, z + 1.25, quayY + levels * 2.7, 'prop', { landmark: 'containers' });
@@ -321,6 +326,7 @@ function buildBridges(group, plan, textures, colliders) {
 
   for (const bridge of plan.bridges) {
     const { width } = bridge;
+    // Eight metres of approach either side, so the deck meets the street cleanly.
     const x0 = bridge.x0 - 8;
     const x1 = bridge.x1 + 8;
     const length = x1 - x0;
@@ -348,6 +354,7 @@ function buildBridges(group, plan, textures, colliders) {
       for (let i = 0; i < archCount; i += 1) {
         const t = i / (archCount - 1);
         const x = x0 + length * (0.06 + t * 0.88);
+        // A sine in the drop gives the shallow arch line under the deck.
         const drop = Math.sin(t * Math.PI) * 2.2 + 0.4;
         stone.box(x, WATER.level - drop, bridge.z, length * 0.06, 0.7, width - 3, colorTriple(0xa89a80), { uvScale: 5 });
       }
@@ -539,6 +546,7 @@ export function buildLandmarks(plan, textures, colliders, options = {}) {
   const addAll = (kind, result) => {
     const mapping = PART_TO_BUCKET[kind] ?? {};
     for (const [part, builder] of Object.entries(result.builders)) {
+      // An empty part would only append nothing; skipping keeps the append offsets simple.
       if (builder.isEmpty) continue;
       masterFor(mapping[part] ?? 'concrete').append(builder);
     }
@@ -559,7 +567,8 @@ export function buildLandmarks(plan, textures, colliders, options = {}) {
 
   addAll('bridges', buildBridges(group, plan, textures, colliders));
 
-  const hangarBlock = blockById(plan, plan.landmarkBlocks.hangars) ?? plan.blocks.find((block) => block.district === 'airstrip');
+  const hangarBlock =
+    blockById(plan, plan.landmarkBlocks.hangars) ?? plan.blocks.find((block) => block.district === 'airstrip');
   if (hangarBlock) addAll('airstrip', buildAirstrip(group, plan, textures, colliders, hangarBlock));
 
   // On a software rasteriser the sign quads are the difference between a dozen and forty

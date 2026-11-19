@@ -1,8 +1,8 @@
 // Street life at ground level: palms, streetlights that come on at dusk, benches, bins,
-// hydrants, market stalls, planters, parked cars and the working traffic signals. Props
-// are placed by walking each block's pavement ring from a seeded stream, so a district's
-// prop mix is its own. Models merge into a few meshes; the lamp heads and signal lenses
-// are InstancedMeshes, which is what makes hundreds of small lights affordable.
+// hydrants, market stalls, planters, parked cars and the working traffic signals. Props are
+// placed by walking each block's pavement ring from a seeded stream, so a district's prop
+// mix is its own. Models merge into a few meshes; the lamp heads and signal lenses are
+// InstancedMeshes, which is what makes hundreds of small lights affordable.
 
 import { MeshBuilder, cityMaterial, colorTriple } from './geometry.js';
 import { Random } from '../core/rng.js';
@@ -16,8 +16,8 @@ const IRON = 0x2f3437;
 const WATERLINE = 640;
 
 /**
- * The signal cycle: green, amber, red, with a per-junction offset. These three numbers
- * must match the ones traffic.js uses, or cars and lamps disagree at the lights.
+ * The signal cycle: green, amber, red, with a per-junction offset. These three numbers must
+ * match the ones traffic.js uses, or cars and lamps disagree at the lights.
  */
 export class TrafficSignals {
   constructor(heads) {
@@ -106,6 +106,7 @@ function streetlight(iron, x, z, rotY, lamps, glowPools, random) {
   iron.box(lx, height - 0.55, lz, 0.95, 0.28, 0.44, colorTriple(0x24282a), { rotY, uvScale: 2 });
 
   lamps.push({ x: lx, y: height - 0.62, z: lz });
+  // The pool is drawn flat on the ground under the head, fading in after dusk.
   glowPools.plane(lx, lz, 9, 9, 0.2, colorTriple(0xffffff), { uvScale: 9, repeatX: 1, repeatY: 1 });
 }
 
@@ -117,6 +118,7 @@ function bench(wood, iron, x, z, rotY, random) {
     iron.box(x + cos * side * 0.85, 0, z - sin * side * 0.85, 0.18, 1.5, 0.5, colorTriple(IRON), { rotY, uvScale: 2 });
   }
   wood.box(x, 1.45, z, 2.1, 0.16, 0.62, tone, { rotY, uvScale: 2 });
+  // The back rest, offset behind the seat along the bench normal.
   wood.box(x - sin * 0.28, 1.9, z - cos * 0.28, 2.1, 0.7, 0.14, tone, { rotY, uvScale: 2 });
 }
 
@@ -207,8 +209,8 @@ export function buildProps(plan, textures, colliders, options = {}) {
   let propCount = 0;
   const chance = (p) => random.chance(clamp(p * detail, 0, 1));
 
-  // Palms count themselves: they can be skipped over water, and both the kerb pass and
-  // the beach promenade place them.
+  // Palms count themselves: they can be skipped over water, and both the kerb pass and the
+  // beach promenade place them.
   const addPalm = (x, z) => {
     if (isWaterAt(x, z)) return;
     palm(iron, leaves, x, z, random.range(5.5, 10.5), random, colliders);
@@ -231,9 +233,9 @@ export function buildProps(plan, textures, colliders, options = {}) {
       { x0: block.x1 - inset, z0: block.z0 + inset, x1: block.x1 - inset, z1: block.z1 - inset, nx: 1, nz: 0 },
     ];
 
-    // Cumulative thresholds over one roll per station. Order is the priority order: a
-    // lamp beats a palm, a palm beats a bench, and so on down to the planters. A handler
-    // that counts its own prop returns false so the loop does not count it twice.
+    // Cumulative thresholds over one roll per station. Order is the priority order: a lamp
+    // beats a palm, a palm beats a bench, and so on down to the planters. A handler that
+    // counts its own prop returns false so the loop does not count it twice.
     const bands = [];
     let edge = 0;
     const band = (width, place) => {
@@ -287,6 +289,7 @@ export function buildProps(plan, textures, colliders, options = {}) {
         for (let i = 0; i < count; i += 1) {
           if (!chance(mix.cars * 0.45)) continue;
           const t = (i + 0.5) / Math.max(1, count);
+          // 1.9 m out from the kerb puts the car in the parking lane, not the traffic lane.
           const x = side.x0 + (side.x1 - side.x0) * t + side.nx * 1.9;
           const z = side.z0 + (side.z1 - side.z0) * t + side.nz * 1.9;
           if (isWaterAt(x, z)) continue;
@@ -298,9 +301,10 @@ export function buildProps(plan, textures, colliders, options = {}) {
   }
 
   // ------------------------------------------------------------- beach extras
-  // Palms down the promenade, benches facing the water and stalls behind them. The beach
-  // is the city's postcard, so it carries more props than its density suggests.
+  // Palms down the promenade, benches facing the water and stalls behind them. The beach is
+  // the city's postcard, so it carries more props than its density suggests.
   for (let x = BEACH.x0 + 12; x <= BEACH.x1 - 10; x += 26) {
+    // Leave the pier approach clear.
     if (x > BEACH.pierX - 12 && x < BEACH.pierX + 12) continue;
     addPalm(x, BEACH.boardwalkZ + 12);
     if (random.chance(0.55)) {
@@ -347,6 +351,7 @@ export function buildProps(plan, textures, colliders, options = {}) {
       if (isWaterAt(px, pz)) continue;
 
       iron.cylinder(px, pz, 0.12, 4.4, 0, 5, colorTriple(IRON), { uvScale: 3 });
+      // The mast arm reaches back over the road the signal controls.
       const arm = 5.2;
       iron.beam(px, pz, px - dx * arm, pz - dz * arm, 0.14, 0.14, 4.3, colorTriple(IRON), { uvScale: 2 });
       const hx = px - dx * arm;
@@ -444,6 +449,7 @@ export function buildProps(plan, textures, colliders, options = {}) {
   let nightFactor = 0;
   function update(dt, context = {}) {
     signals.update(dt, lensMesh, colorSets);
+    // Lamps warm up as the night comes in; the pools ride the same factor.
     nightFactor += (clamp(context.night ?? 0, 0, 1) - nightFactor) * Math.min(1, dt * 2.5);
     lampMaterial.opacity = 0.15 + nightFactor * 0.85;
     lampMaterial.color.setRGB(1, 0.78 + nightFactor * 0.08, 0.5 + nightFactor * 0.1);
